@@ -1,3 +1,0 @@
-# quantgame
-# quantgame
-# quantgame
