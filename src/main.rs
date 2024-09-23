@@ -1,4 +1,4 @@
-use std::{collections::HashMap, f32::consts::E, time::Instant};
+use std::time::Instant;
 
 use crossterm::event::{self, poll, Event, KeyCode, KeyEvent, KeyEventKind};
 use rand::Rng;
@@ -6,81 +6,19 @@ use rand::Rng;
 use std::io;
 
 use ratatui::{
-    buffer::Buffer,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Style, Stylize},
-    symbols::border,
-    text::{Line, Span, Text},
-    widgets::{
+    buffer::Buffer, crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::Stylize, symbols::border, text::{Line, Span, Text}, widgets::{
         block::{Position, Title},
         Block, Paragraph, Widget,
-    },
-    DefaultTerminal, Frame,
+    }, DefaultTerminal, Frame
 };
 
-use std::thread;
 use std::time::Duration;
 
-struct Timer<F> {
-    delay: Duration,
-    action: F,
-}
-
-impl<F> Timer<F>
-where
-    F: FnOnce() + Send + Sync + 'static,
-{
-    fn new(delay: Duration, action: F) -> Self {
-        Timer { delay, action }
-    }
-
-    fn start(self) {
-        thread::spawn(move || {
-            thread::sleep(self.delay);
-            (self.action)();
-        });
-    }
-}
-
-
-fn binomial(increment: i32, mut remaining: i32) -> Vec<i32>{
-    let mut oldvar = vec![increment];
-    while remaining > 0 {
-        let mut newvar: Vec<i32> = vec![];
-
-        for i in oldvar{
-            let plusval = i + increment*2;
-            let minval: i32 = i - increment/2;
-            newvar.push(plusval);
-            newvar.push(minval);
-        }
-        // println!("{:?}", newvar);
-        oldvar = newvar;
-
-        remaining -= 1;
-    }
-    return oldvar;
-
-}
-    
-#[derive(Debug)]
-pub struct BinomialPut {
-    t: f32,
-    T: u8,
-    d: f32,
-    u: f32, 
-    r: f32,
-    vol: f32,
-    strike: f32, 
-    price: f32,
-    exit: bool,
-
-}
 
 #[derive(Debug)]
 pub struct MathGame {
     current_question: MathQuestion,
-    game_is_started: bool,
+    // game_is_started: bool,
     exit: bool,
     input: String,
     score: i32,
@@ -94,7 +32,18 @@ pub struct MathGame {
 
 impl Default for MathGame {
     fn default() -> Self {
-        Self { current_question: Default::default(), game_is_started: Default::default(), exit: Default::default(), input: Default::default(), score: Default::default(), add_lower: 2, add_upper: 100, mult_lower: 2, mult_upper: 12, start_time: Instant::now(), current_time: Instant::now() }
+        Self { 
+            current_question: Default::default(), 
+            // game_is_started: Default::default(), 
+            exit: Default::default(), 
+            input: Default::default(), 
+            score: Default::default(),
+            add_lower: 2,
+            add_upper: 100,
+            mult_lower: 2,
+            mult_upper: 12,
+            start_time: Instant::now(),
+            current_time: Instant::now() }
     }
 }
 #[derive(Debug)]
@@ -161,11 +110,7 @@ impl Widget for &MathGame {
                     .position(Position::Bottom),
             )
             .border_set(border::ROUNDED);
-        let block2 = Block::bordered()
-            .title(Title::from(""))
-            
-            .border_set(border::ROUNDED);
-            // .border_style(Style::new().blue());
+        
         let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
         let mut input_line = Span::from(self.input.clone().white());    
         if solved{
@@ -209,7 +154,7 @@ impl  MathGame {
             Sign::Subtract => {
                 let lhs = rand::thread_rng().gen_range(self.add_lower..self.add_upper);
                 let rhs = rand::thread_rng().gen_range(self.add_lower..self.add_upper);
-                if (lhs>rhs){
+                if lhs>rhs{
                     return (lhs,rhs)
                 }
                 (rhs, lhs)
@@ -231,9 +176,6 @@ impl  MathGame {
         };
 
         let lhs_rhs = Self::generate_lhs_rhs(self, &sign);
-
-        let lhs = rand::thread_rng().gen_range(0..12);
-        let rhs = rand::thread_rng().gen_range(0..12);
         // let sign = Sign::Add; 
         let answer = apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
 
