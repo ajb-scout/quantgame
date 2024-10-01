@@ -1,8 +1,9 @@
+mod config;
 use std::time::Instant;
-
+use config::QuestionRanges;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEvent, KeyEventKind};
 use rand::Rng;
-
+use crate::config::GameConfiguration;
 use std::io;
 
 use ratatui::{
@@ -29,30 +30,25 @@ pub struct MathGame {
     exit: bool,
     input: String,
     score: i32,
-    add_lower: i32,
-    add_upper: i32,
-    mult_lower: i32,
-    mult_upper: i32,
     start_time: Instant, 
     current_time: Instant,
-    gamestate: GameState
+    gamestate: GameState,
+    gameconfig: GameConfiguration
 }
 
 impl Default for MathGame {
     fn default() -> Self {
+        let config = GameConfiguration::default();
         Self { 
-            current_question: Default::default(), 
+            current_question: MathQuestion::generate_new_question(&config.qr), 
             // game_is_started: Default::default(), 
             exit: Default::default(), 
             input: Default::default(), 
             score: Default::default(),
-            add_lower: 2,
-            add_upper: 100,
-            mult_lower: 2,
-            mult_upper: 12,
             start_time: Instant::now(),
             current_time: Instant::now(),
-            gamestate: GameState::Setup
+            gamestate: GameState::Setup,
+            gameconfig: config
         }
     }
 }
@@ -61,12 +57,41 @@ pub struct MathQuestion{
     lhs: i32,
     rhs: i32,
     answer: i32,
-    sign: Sign
+    sign: Sign,
 }
 
-impl Default for MathQuestion {
-    fn default() -> Self {
-        Self { lhs: 2, rhs: 3, answer: 5, sign: Sign::Add }
+impl MathQuestion {
+
+    fn generate_lhs_rhs(qr: &QuestionRanges, sign: &Sign) -> (i32, i32){
+        return match sign {
+        Sign::Multiply => {(rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper), rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper))},
+        Sign::Add => {(rand::thread_rng().gen_range(qr.add_lower..qr.add_upper), rand::thread_rng().gen_range(qr.add_lower..qr.add_upper))},
+        Sign::Subtract => {
+            let lhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
+            let rhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
+            if lhs>rhs{
+                return (lhs,rhs)
+            }
+            (rhs, lhs)
+
+        },
+        Sign::Divide => {(rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper), rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper))},
+    }
+    }
+
+pub fn generate_new_question(qr: &QuestionRanges) -> MathQuestion {
+    let sign =  match rand::thread_rng().gen_range(1..5) {
+        1 => Sign::Add,
+        2 => Sign::Subtract,
+        3 => Sign::Multiply,
+        4 => Sign::Divide,
+        _ => panic!("Shouldn't be able to generate this")
+    };
+
+    let lhs_rhs = Self::generate_lhs_rhs(qr, &sign);
+    let answer: i32 = apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
+    let new_question = MathQuestion { lhs: lhs_rhs.0, rhs: lhs_rhs.1, answer: answer, sign: sign};
+    return new_question
     }
 }
 
@@ -77,7 +102,7 @@ enum Sign {
     Subtract,
     Divide
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum GameState {
     Setup,
     Inprogress,
@@ -110,8 +135,7 @@ impl Widget for &MathGame {
         let score = Title::from(Line::from(vec![
             " Score:  ".into(),
             self.score.to_string().bold(),
-            " ".into(),
-            " Elapsed:  ".into(),
+            "  Elapsed:  ".into(),
             self.current_time.duration_since(self.start_time).as_secs().to_string().bold(),
             " ".into(),
         ]));
@@ -140,7 +164,7 @@ impl Widget for &MathGame {
                 " ".into(),
                 self.current_question.rhs.to_string().into(),
                 " = ".into(),
-                self.current_question.answer.to_string().into(),
+                // self.current_question.answer.to_string().into(),
                 input_line,
                 ]),
             ]);
@@ -153,39 +177,6 @@ impl Widget for &MathGame {
 }
 
 impl MathGame {
-    fn generate_lhs_rhs(self: &mut MathGame, sign: &Sign) -> (i32, i32){
-        return match sign {
-            Sign::Multiply => {(rand::thread_rng().gen_range(self.mult_lower..self.mult_upper), rand::thread_rng().gen_range(self.mult_lower..self.mult_upper))},
-            Sign::Add => {(rand::thread_rng().gen_range(self.add_lower..self.add_upper), rand::thread_rng().gen_range(self.add_lower..self.add_upper))},
-            Sign::Subtract => {
-                let lhs = rand::thread_rng().gen_range(self.add_lower..self.add_upper);
-                let rhs = rand::thread_rng().gen_range(self.add_lower..self.add_upper);
-                if lhs>rhs{
-                    return (lhs,rhs)
-                }
-                (rhs, lhs)
-
-            },
-            Sign::Divide => {(rand::thread_rng().gen_range(self.mult_lower..self.mult_upper), rand::thread_rng().gen_range(self.mult_lower..self.mult_upper))},
-        }
-    }
-
-    fn generate_new_question(self: &mut MathGame) -> MathQuestion {
-        let sign =  match rand::thread_rng().gen_range(1..5) {
-            1 => Sign::Add,
-            2 => Sign::Subtract,
-            3 => Sign::Multiply,
-            4 => Sign::Divide,
-            _ => panic!("Shouldn't be able to generate this")
-        };
-
-        let lhs_rhs = Self::generate_lhs_rhs(self, &sign);
-        let answer: i32 = apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
-        let new_question = MathQuestion { lhs: lhs_rhs.0, rhs: lhs_rhs.1, answer: answer, sign: sign};
-        return new_question
-
-
-    }
 
     fn draw_splash(&self, frame: &mut Frame){
         let outer_layout = Layout::new(
@@ -227,14 +218,18 @@ impl MathGame {
 
             match self.gamestate {
                 GameState::Setup => terminal.draw(|frame| self.draw_splash(frame))?,
-                GameState::Inprogress => todo!(),
+                GameState::Inprogress => terminal.draw(|frame| self.draw(frame))?,
                 GameState::EndingSplash => todo!(),
             };
 
             self.current_time = Instant::now(); 
                 if poll(Duration::from_millis(10))? { //pings crossterm for input every 10ms
                      self.handle_events()?;
-                }
+            }
+
+            if self.gamestate == GameState::Inprogress && self.current_time.duration_since(self.start_time).as_secs() > self.gameconfig.timer.try_into().unwrap() { //this will panic if too long. TODO fix
+                self.gamestate = GameState::EndingSplash;
+            }
         }
         Ok(())
     }
@@ -246,7 +241,7 @@ impl MathGame {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
                 match self.gamestate{
                     GameState::Setup => self.handle_key_event_splash(key_event),
-                    GameState::Inprogress => todo!(),
+                    GameState::Inprogress => self.handle_key_event_game(key_event),
                     GameState::EndingSplash => todo!(),
                 }
         
@@ -259,6 +254,23 @@ impl MathGame {
     fn handle_key_event_splash(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
+            KeyCode::Char('s') => {self.gamestate = GameState::Inprogress; self.start_time = Instant::now()},
+            KeyCode::Delete => {self.input.pop();}
+
+            _ => {self.input.push_str(&key_event.code.to_string())}
+        }
+
+        let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
+        if solved{
+            self.score += 1;
+            self.input.clear();
+            self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
+        }
+    }
+
+    fn handle_key_event_game(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
             KeyCode::Backspace => {self.input.pop();}
             KeyCode::Delete => {self.input.pop();}
 
@@ -269,7 +281,7 @@ impl MathGame {
         if solved{
             self.score += 1;
             self.input.clear();
-            self.current_question = Self::generate_new_question(self)
+            self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
         }
     }
 
