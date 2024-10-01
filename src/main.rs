@@ -6,15 +6,22 @@ use rand::Rng;
 use std::io;
 
 use ratatui::{
-    buffer::Buffer, crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::Stylize, symbols::border, text::{Line, Span, Text}, widgets::{
+    buffer::Buffer, crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::Stylize, symbols::border, text::{Line, Span, Text, ToSpan}, widgets::{
         block::{Position, Title},
-        Block, Paragraph, Widget,
+        Block, Paragraph, Widget, Wrap,
     }, DefaultTerminal, Frame
 };
 
 use std::time::Duration;
 
 
+const ascii_title: [&str;5] = [
+    "   ____                   _     ___                     ",
+    r"  /___ \_   _  __ _ _ __ | |_  / _ \__ _ _ __ ___   ___ ",
+    r" //  / / | | |/ _` | '_ \| __|/ /_\/ _` | '_ ` _ \ / _ \",
+    r"/ \_/ /| |_| | (_| | | | | |_/ /_\\ (_| | | | | | |  __/",
+    r"\___,_\ \__,_|\__,_|_| |_|\__\____/\__,_|_| |_| |_|\___|",
+];
 #[derive(Debug)]
 pub struct MathGame {
     current_question: MathQuestion,
@@ -27,7 +34,8 @@ pub struct MathGame {
     mult_lower: i32,
     mult_upper: i32,
     start_time: Instant, 
-    current_time: Instant
+    current_time: Instant,
+    gamestate: GameState
 }
 
 impl Default for MathGame {
@@ -43,7 +51,9 @@ impl Default for MathGame {
             mult_lower: 2,
             mult_upper: 12,
             start_time: Instant::now(),
-            current_time: Instant::now() }
+            current_time: Instant::now(),
+            gamestate: GameState::Setup
+        }
     }
 }
 #[derive(Debug)]
@@ -66,6 +76,12 @@ enum Sign {
     Add,
     Subtract,
     Divide
+}
+#[derive(Debug)]
+enum GameState {
+    Setup,
+    Inprogress,
+    EndingSplash
 }
 
 fn match_sign(sign: &Sign) -> char {
@@ -98,9 +114,7 @@ impl Widget for &MathGame {
             " Elapsed:  ".into(),
             self.current_time.duration_since(self.start_time).as_secs().to_string().bold(),
             " ".into(),
-
         ]));
-
 
         let block = Block::bordered()
             .title(title.alignment(Alignment::Center))
@@ -113,14 +127,12 @@ impl Widget for &MathGame {
         
         let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
         let mut input_line = Span::from(self.input.clone().white());    
-        if solved{
+        if solved {
             input_line = Span::from(self.input.clone().green());
-    
         } 
 
-
         let counter_text = Text::from(vec![
-            Line::from(vec!["Question 1: ".yellow()]),
+            Line::from(vec![format!("Question {}: ", self.score + 1).yellow()]),
             Line::from(vec![
                 self.current_question.lhs.to_string().into(), 
                 " ".into(),
@@ -129,24 +141,18 @@ impl Widget for &MathGame {
                 self.current_question.rhs.to_string().into(),
                 " = ".into(),
                 self.current_question.answer.to_string().into(),
-
                 input_line,
-
                 ]),
-
             ]);
 
-
         Paragraph::new(counter_text)
-            // .centered()
-            
             .alignment(Alignment::Center)
             .block(block)
-            // .block(block2)
             .render(area, buf);
-}}
+    }
+}
 
-impl  MathGame {
+impl MathGame {
     fn generate_lhs_rhs(self: &mut MathGame, sign: &Sign) -> (i32, i32){
         return match sign {
             Sign::Multiply => {(rand::thread_rng().gen_range(self.mult_lower..self.mult_upper), rand::thread_rng().gen_range(self.mult_lower..self.mult_upper))},
@@ -170,45 +176,65 @@ impl  MathGame {
             2 => Sign::Subtract,
             3 => Sign::Multiply,
             4 => Sign::Divide,
-
             _ => panic!("Shouldn't be able to generate this")
-
         };
 
         let lhs_rhs = Self::generate_lhs_rhs(self, &sign);
-        // let sign = Sign::Add; 
-        let answer = apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
-
+        let answer: i32 = apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
         let new_question = MathQuestion { lhs: lhs_rhs.0, rhs: lhs_rhs.1, answer: answer, sign: sign};
         return new_question
 
 
     }
+
+    fn draw_splash(&self, frame: &mut Frame){
+        let outer_layout = Layout::new(
+            Direction::Vertical, vec![Constraint::Percentage(10), Constraint::Percentage(70), Constraint::Percentage(20)]).split(frame.area());
+
+        // build the ascii string from the title 
+        let mut title_vec = vec![];
+        for i in ascii_title.iter().copied() {
+            title_vec.push(Line::from(i));
+        }
+        
+        // build text objects
+        let splash_text = Text::from(title_vec).alignment(Alignment::Left);
+        let options_text = (Span::from("S").underlined() + Span::from("tart")) + (Span::from("Q").underlined() + Span::from("uit")) + (Span::from("S") + Span::from("e").underlined() + Span::from("ttings"));
+        
+        // build splash para
+        let splash_para = Paragraph::new(splash_text).alignment(Alignment::Center).wrap(Wrap {trim: false});
+        let options_para = Paragraph::new(options_text).alignment(Alignment::Center).wrap(Wrap {trim: false});
+
+        // render the widgets
+        frame.render_widget(Block::bordered().border_set(border::ROUNDED), frame.area());
+        frame.render_widget(splash_para, outer_layout[1]);
+        frame.render_widget(options_para, outer_layout[2]);
+    }
+
     fn draw(&self, frame: &mut Frame) {
-        let layout = Layout::new(
+        let layout: std::rc::Rc<[Rect]> = Layout::new(
             Direction::Vertical,
-            [Constraint::Length(30), Constraint::Min(10)],
+            [Constraint::Percentage(50), Constraint::Percentage(50)],
         )
-        .split(Rect::new(0, 0, 30, 20));
-   
-           frame.render_widget(self, layout[0]);
-           frame.render_widget(Block::bordered(), layout[1]);
-   
+        .split(frame.area());
+        frame.render_widget(self, layout[0]);
+        frame.render_widget(Block::bordered(), layout[1]);
        }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
 
-            terminal.draw(|frame| self.draw(frame))?;
+            match self.gamestate {
+                GameState::Setup => terminal.draw(|frame| self.draw_splash(frame))?,
+                GameState::Inprogress => todo!(),
+                GameState::EndingSplash => todo!(),
+            };
+
             self.current_time = Instant::now(); 
-            // if let Event::Key(key) = event::read()? {
-                if poll(Duration::from_millis(10))? {
-                    // It's guaranteed that `read` won't block, because `poll` returned
-                    // `Ok(true)`.
+                if poll(Duration::from_millis(10))? { //pings crossterm for input every 10ms
                      self.handle_events()?;
                 }
-            // self.current_time.elapsed()
         }
         Ok(())
     }
@@ -218,21 +244,24 @@ impl  MathGame {
             // it's important to check that the event is a key press event as
             // crossterm also emits key release and repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+                match self.gamestate{
+                    GameState::Setup => self.handle_key_event_splash(key_event),
+                    GameState::Inprogress => todo!(),
+                    GameState::EndingSplash => todo!(),
+                }
+        
             }
             _ => {}
         };
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
+    fn handle_key_event_splash(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
             KeyCode::Backspace => {self.input.pop();}
             KeyCode::Delete => {self.input.pop();}
 
-            // KeyCode::Left => self.decrement_counter(),
-            // KeyCode::Right => self.increment_counter(),
             _ => {self.input.push_str(&key_event.code.to_string())}
         }
 
@@ -240,23 +269,14 @@ impl  MathGame {
         if solved{
             self.score += 1;
             self.input.clear();
-            
-
             self.current_question = Self::generate_new_question(self)
-            
         }
-
-
     }
 
     fn exit(&mut self) {
         self.exit = true;
     }
 }
-
-
-
-
 
 
 fn main() -> io::Result<()> {
