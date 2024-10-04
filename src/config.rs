@@ -2,12 +2,20 @@
 pub struct GameConfiguration {
     pub endless: bool,
     pub timer: i32, 
-    pub qr: QuestionRanges
+    pub qr: QuestionRanges,
+    pub debug: bool,
+    pub debug_questions: i32,
 }
 
 impl Default for GameConfiguration {
     fn default() -> Self {
-        Self { endless: false, timer: 2, qr: QuestionRanges::default()}
+        Self { 
+            endless: false, 
+            timer: 5, qr: 
+            QuestionRanges::default(),
+            debug: false,
+            debug_questions: 72
+        }
     }
 }
 #[derive(Debug)]
