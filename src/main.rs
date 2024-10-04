@@ -2,18 +2,20 @@ mod config;
 mod history;
 
 use crate::config::GameConfiguration;
+use chrono::prelude::*;
 use config::QuestionRanges;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEvent, KeyEventKind};
-use history::{GameHistory, GameRecord};
+use history::{render_table_from_history, GameHistory, GameRecord};
 use rand::Rng;
+use rand_distr::num_traits::ToPrimitive;
 use rand_distr::{Distribution, Normal};
-use chrono::prelude::*;
 
 use ratatui::style::{Color, Style};
-use ratatui::symbols;
 use ratatui::widgets::{
-    Axis, BorderType, Borders, Chart, Dataset, GraphType, ScrollbarState, Sparkline,
+    Axis, Bar, BarChart, BarGroup, BorderType, Borders, Chart, Dataset, GraphType, ScrollbarState,
+    Sparkline,
 };
+use ratatui::{layout, symbols};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, time::Instant};
 use std::{io, thread};
@@ -55,7 +57,8 @@ pub struct MathGame {
     gameconfig: GameConfiguration,
     result_table_state: TableState,
     scrollbar_state: ScrollbarState,
-    game_history: GameHistory
+    game_history: GameHistory,
+    history_table_state: TableState,
 }
 
 impl Default for MathGame {
@@ -75,7 +78,8 @@ impl Default for MathGame {
             gameconfig: config,
             result_table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::default(),
-            game_history: GameHistory::new("results.json").unwrap()   
+            game_history: GameHistory::new("results.json").unwrap(),
+            history_table_state: TableState::default().with_selected(0),
         }
     }
 }
@@ -85,9 +89,7 @@ pub struct MathQuestion {
     rhs: i32,
     answer: i32,
     sign: Sign,
-    #[serde(skip)]
     question_start: DateTime<Local>,
-    #[serde(skip)]
     question_answer: Option<DateTime<Local>>,
 }
 
@@ -193,7 +195,8 @@ impl Widget for &MathGame {
             " Score:  ".into(),
             self.score.to_string().bold(),
             "  Elapsed:  ".into(),
-            (self.current_time - self.start_time).num_seconds()
+            (self.current_time - self.start_time)
+                .num_seconds()
                 .to_string()
                 .bold(),
             " ".into(),
@@ -283,9 +286,7 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     let v = qs
         .iter()
         .map(|i| {
-            (i.question_answer
-                .unwrap_or(Local::now()) - i.question_start)
-                .num_milliseconds() as f32
+            (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds() as f32
         })
         .collect::<Vec<f32>>();
 
@@ -295,7 +296,7 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     for (x, i) in qs.iter().enumerate() {
         let qstring = i.lhs.to_string() + " " + &i.sign.to_string() + " " + &i.rhs.to_string();
         let astring = i.answer.to_string();
-        let mut tstring = (i.question_answer.unwrap_or(Local::now()) -i.question_start)
+        let mut tstring = (i.question_answer.unwrap_or(Local::now()) - i.question_start)
             .num_milliseconds()
             .to_string();
         // tstring.insert(tstring.len() - 3, '.');
@@ -352,20 +353,39 @@ fn render_sparkline_from(frame: &mut Frame, area: Rect, qs: &Vec<MathQuestion>) 
     for (i, q) in qs.iter().enumerate() {
         d1.push((
             i as f64,
-            ((q.question_answer.unwrap())-(q.question_start)).num_milliseconds() as f64)
-        );
+            ((q.question_answer.unwrap()) - (q.question_start)).num_milliseconds() as f64,
+        ));
     }
+
+    let colors = create_gradient(&d1.iter().map(|f| f.1 as f32).collect::<Vec<f32>>());
+
+    let bars: Vec<Bar> = qs
+        .iter()
+        .enumerate()
+        .map(|(u, f)| {
+            Bar::default()
+                .value((f.question_answer.unwrap() - f.question_start).num_milliseconds() as u64)
+                .style(colors[u])
+        })
+        .collect();
     let datasets = vec![
         // Scatter chart
         Dataset::default()
             .name("Times")
             // .marker(symbols)
+            .marker(symbols::Marker::Block)
             .graph_type(GraphType::Bar)
             .style(Style::default().cyan())
             .data(&d1),
         // Line chart
     ];
-
+    let bc = BarChart::default()
+        .block(Block::bordered().title("BarChart"))
+        // .bar_width(1)
+        // .bar_gap(1)
+        .value_style(Style::new().red().bold())
+        .label_style(Style::new().white())
+        .data(BarGroup::default().bars(&bars));
     // Create the X axis and define its properties
     let binding = d1.len().to_string();
     let x_axis = Axis::default()
@@ -401,7 +421,7 @@ fn render_sparkline_from(frame: &mut Frame, area: Rect, qs: &Vec<MathQuestion>) 
         .x_axis(x_axis)
         .y_axis(y_axis);
 
-    frame.render_widget(chart, area);
+    frame.render_widget(bc, area);
 }
 
 fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Duration> {
@@ -431,7 +451,7 @@ fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Durati
 
 impl MathGame {
     fn draw_splash(&self, frame: &mut Frame) {
-        let outer_layout = Layout::new(
+        let outer_layout: std::rc::Rc<[Rect]> = Layout::new(
             Direction::Vertical,
             vec![
                 Constraint::Percentage(10),
@@ -468,9 +488,26 @@ impl MathGame {
         frame.render_widget(options_para, outer_layout[2]);
     }
 
-    fn draw_history_splash(&self, frame: &mut Frame){
-        frame.render_widget(Block::bordered().title("History"), frame.area());
+    fn draw_history_splash(&mut self, frame: &mut Frame) {
+        let layout: std::rc::Rc<[Rect]> = Layout::new(
+            Direction::Horizontal,
+            vec![Constraint::Percentage(30), Constraint::Percentage(70)],
+        )
+        .split(frame.area());
 
+        let mut selected_index_no_oob = self.history_table_state.selected().unwrap_or(0) as u32;
+        if selected_index_no_oob+1 >= self.game_history.history.len().try_into().unwrap() {
+            selected_index_no_oob = self.game_history.history.len() as u32 -1;
+        }
+
+
+        let table = render_table_from_history(&self.game_history);
+        let qtable = render_table_from_questions(
+            &self.game_history.history[selected_index_no_oob.to_usize().unwrap()].answers,
+        );
+
+        frame.render_stateful_widget(table, layout[0], &mut self.history_table_state);
+        frame.render_widget(qtable, layout[1]);
     }
 
     fn draw_end_splash(&mut self, frame: &mut Frame) {
@@ -533,13 +570,18 @@ impl MathGame {
                 GameState::EndingSplash => {
                     terminal.draw(|frame: &mut Frame<'_>| self.draw_end_splash(frame))?
                 }
-                GameState::HistorySplash => terminal.draw(|frame | self.draw_history_splash(frame))?,
+                GameState::HistorySplash => {
+                    terminal.draw(|frame| self.draw_history_splash(frame))?
+                }
                 GameState::SettingsSpash => todo!(),
             };
 
             self.current_time = Local::now();
 
-            if self.gameconfig.debug && debug_index < debug_times.len() {
+            if self.gameconfig.debug
+                && debug_index < debug_times.len()
+                && self.gamestate != GameState::EndingSplash
+            {
                 if self.gamestate == GameState::Setup {
                     self.gamestate = GameState::Inprogress;
                 }
@@ -575,7 +617,11 @@ impl MathGame {
                 self.answered_questions.push(self.current_question);
                 //this will panic if too long. TODO fix
                 self.gamestate = GameState::EndingSplash;
-                self.game_history.add_game_result(GameRecord {game_intant: Utc::now(),score: self.score,answers: self.answered_questions.clone()});
+                self.game_history.add_game_result(GameRecord {
+                    game_intant: Utc::now(),
+                    score: self.score,
+                    answers: self.answered_questions.clone(),
+                });
                 let _ = self.game_history.save();
             }
         }
@@ -591,7 +637,7 @@ impl MathGame {
                     GameState::Setup => self.handle_key_event_splash(key_event),
                     GameState::Inprogress => self.handle_key_event_game(key_event),
                     GameState::EndingSplash => self.handle_end_event_splash(key_event),
-                    GameState::HistorySplash => self.handle_key_event_game(key_event),
+                    GameState::HistorySplash => self.handle_key_event_history(key_event),
                     GameState::SettingsSpash => self.handle_key_event_game(key_event),
                 }
             }
@@ -608,9 +654,11 @@ impl MathGame {
         }
     }
 
-    fn handle_key_history_splash(&mut self, key_event: KeyEvent){
+    fn handle_key_event_history(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char(_) => todo!(),
+            KeyCode::Char('q') => self.exit(),
+            KeyCode::Up => self.history_table_state.select_previous(),
+            KeyCode::Down => self.history_table_state.select_next(),
             _ => {}
         }
     }
@@ -625,13 +673,13 @@ impl MathGame {
             }
             KeyCode::Char('h') => {
                 self.gamestate = GameState::HistorySplash;
-            } 
+            }
 
             KeyCode::Delete => {
                 self.input.pop();
             }
 
-            _ => {},
+            _ => {}
         }
 
         let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);

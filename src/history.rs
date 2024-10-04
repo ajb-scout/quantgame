@@ -1,9 +1,13 @@
+use ratatui::layout::Constraint;
+use ratatui::style::{Color, Style};
+use ratatui::symbols::border;
+use ratatui::text::{Line, Text};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use chrono::serde::ts_nanoseconds;
-
+use ratatui::widgets::*;
 use chrono::{DateTime, Local, Utc};
 
 use crate::MathQuestion;
@@ -11,7 +15,8 @@ use crate::MathQuestion;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameHistory {
     path: String,
-    history: Vec<GameRecord>
+    pub history: Vec<GameRecord>,
+    
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -21,6 +26,8 @@ pub struct GameRecord {
     pub score: i32, 
     pub answers: Vec<MathQuestion>
 }
+
+
 
 impl GameHistory {
     // Load or create the game history from a specified path
@@ -36,6 +43,7 @@ impl GameHistory {
             // Deserialize the JSON content into a GameHistory struct
             let mut history: GameHistory = serde_json::from_str(&contents)?;
             history.path = path_str; // Update the path
+
             Ok(history)
         } else {
             // If the file does not exist, create a new GameHistory with an empty history
@@ -64,3 +72,48 @@ impl GameHistory {
     }
 }
 
+pub fn render_table_from_history(hs: &GameHistory) -> Table {
+    let header = ["#", "Date", "Score"]
+        .into_iter()
+        .map(Cell::from)
+        .collect::<Row>()
+        .height(2);
+
+
+    let mut rows: Vec<Row> = vec![];
+    for (x, i) in hs.history.iter().enumerate() {
+        rows.push(Row::new(vec![
+            Line::from(x.to_string()),
+            Line::from(i.game_intant.to_string()),
+            Line::from(i.score.to_string()),
+        ]));
+    }
+
+    let bar = " █ ";
+
+    let table = Table::new(
+        rows,
+        [
+            // + 1 is for padding.
+            Constraint::Length(6),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::bordered()
+            .title("Table")
+            .border_type(BorderType::Rounded),
+    )
+    .highlight_style(Style::new().bg(Color::DarkGray))
+    .highlight_symbol(">>")
+    .column_spacing(1)
+    .highlight_symbol(Text::from(vec![
+        "".into(),
+        bar.into(),
+        bar.into(),
+        "".into(),
+    ]));
+    return table;
+}
