@@ -447,7 +447,7 @@ fn render_sparkline_from(
         // Line chart
     ];
     let bc = BarChart::default()
-        .block(Block::bordered().title("BarChart"))
+        .block(Block::bordered().title("Chart"))
         .bar_width(1)
         .bar_gap(0)
         .direction(orientation)
