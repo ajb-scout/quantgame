@@ -1,2 +1,2 @@
 Rust package utilising Ratatui to practice mental maths with a quant interview focus.
-![example workflow](https://github.com/ajb-scout/quantgame/blob/main/.github/workflows/rust.yml/badge.svg)
+[![Rust](https://github.com/ajb-scout/quantgame/actions/workflows/rust.yml/badge.svg)](https://github.com/ajb-scout/quantgame/actions/workflows/rust.yml)
