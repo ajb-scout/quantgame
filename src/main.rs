@@ -303,20 +303,11 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
         tstring.push_str(" s");
         // let msstring = i.question_answer.unwrap().duration_since(i.question_start).as_millis().
 
-        if x == qs.len() - 1 {
-            //TODO refactor this is bad
-            rows.push(Row::new(vec![
-                Line::from(qstring),
-                Line::from(astring),
-                Line::from(tstring).red(),
-            ]));
-        } else {
-            rows.push(Row::new(vec![
-                Line::from(qstring),
-                Line::from(astring),
-                Line::from(tstring).style(Style::new().fg(colors[x])),
-            ]));
-        }
+        rows.push(Row::new(vec![
+            Line::from(qstring),
+            Line::from(astring),
+            Line::from(tstring).style(Style::new().fg(colors[x])),
+        ]));
     }
 
     let bar = " █ ";
@@ -346,8 +337,79 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     ]));
     return table;
 }
+fn render_score_history_graph(
+    frame: &mut Frame,
+    area: Rect,
+    history: &Vec<GameRecord>,
+) {
+    let mut d1: Vec<(f64, f64)> = vec![];
 
-fn render_sparkline_from(frame: &mut Frame, area: Rect, qs: &Vec<MathQuestion>) {
+    for (i, q) in history.iter().enumerate() {
+        d1.push((
+            i as f64,
+            q.score as f64
+        ));
+    }
+
+    let datasets = vec![
+        // Scatter chart
+        Dataset::default()
+            .name("Times")
+            // .marker(symbols)
+            .marker(symbols::Marker::Block)
+            .graph_type(GraphType::Bar)
+            .style(Style::default().cyan())
+            .data(&d1),
+        // Line chart
+    ];
+
+    // Create the X axis and define its properties
+    let binding = d1.len().to_string();
+    let x_axis = Axis::default()
+        .title("X Axis".red())
+        .style(Style::default().white())
+        .bounds([0.0, d1.len() as f64])
+        .labels(["0.0", &binding]);
+
+    // Create the Y axis and define its properties
+    let binding = d1
+        .iter()
+        .map(|f| f.1)
+        .collect::<Vec<f64>>()
+        .into_iter()
+        .fold(0. / 0., f64::max)
+        .to_string();
+    let y_axis = Axis::default()
+        .title("Y Axis".red())
+        .style(Style::default().white())
+        .bounds([
+            0.0,
+            d1.iter()
+                .map(|f| f.1)
+                .collect::<Vec<f64>>()
+                .into_iter()
+                .fold(0. / 0., f64::max),
+        ])
+        .labels(["0.0", &binding]);
+
+    // Create the chart and link all the parts together
+    let chart = Chart::new(datasets)
+        .block(Block::new().title("Chart"))
+        .x_axis(x_axis)
+        .y_axis(y_axis);
+
+    frame.render_widget(chart, area);
+}
+
+
+
+//TODO - can I change this so that it no longer renders in place and instrad returns a chart object?
+fn render_sparkline_from(
+    frame: &mut Frame,
+    area: Rect,
+    qs: &Vec<MathQuestion>,
+    orientation: Direction,
+) {
     let mut d1: Vec<(f64, f64)> = vec![];
 
     for (i, q) in qs.iter().enumerate() {
@@ -366,6 +428,11 @@ fn render_sparkline_from(frame: &mut Frame, area: Rect, qs: &Vec<MathQuestion>) 
             Bar::default()
                 .value((f.question_answer.unwrap() - f.question_start).num_milliseconds() as u64)
                 .style(colors[u])
+                .text_value(format!(
+                    "{:<6}ms ",
+                    (f.question_answer.unwrap() - f.question_start).num_milliseconds()
+                ))
+                .value_style(colors[u])
         })
         .collect();
     let datasets = vec![
@@ -381,8 +448,9 @@ fn render_sparkline_from(frame: &mut Frame, area: Rect, qs: &Vec<MathQuestion>) 
     ];
     let bc = BarChart::default()
         .block(Block::bordered().title("BarChart"))
-        // .bar_width(1)
-        // .bar_gap(1)
+        .bar_width(1)
+        .bar_gap(0)
+        .direction(orientation)
         .value_style(Style::new().red().bold())
         .label_style(Style::new().white())
         .data(BarGroup::default().bars(&bars));
@@ -469,9 +537,9 @@ impl MathGame {
 
         // build text objects
         let splash_text = Text::from(title_vec).alignment(Alignment::Left);
-        let options_text = (Span::from("S").underlined() + Span::from("tart"))
-            + (Span::from("Q").underlined() + Span::from("uit"))
-            + (Span::from("S") + Span::from("e").underlined() + Span::from("ttings"))
+        let options_text = (Span::from("S").underlined().bold() + Span::from("tart"))
+            + (Span::from("Q").underlined().bold() + Span::from("uit"))
+            + (Span::from("S") + Span::from("e").underlined().bold() + Span::from("ttings"))
             + (Span::from("H").underlined().bold() + Span::from("istory"));
 
         // build splash para
@@ -489,17 +557,25 @@ impl MathGame {
     }
 
     fn draw_history_splash(&mut self, frame: &mut Frame) {
+        let outer_layout = Layout::new(
+            Direction::Vertical,
+            vec![Constraint::Percentage(80), Constraint::Percentage(20)],
+        ).split(frame.area());
+
         let layout: std::rc::Rc<[Rect]> = Layout::new(
             Direction::Horizontal,
-            vec![Constraint::Percentage(30), Constraint::Percentage(70)],
+            vec![
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ],
         )
-        .split(frame.area());
+        .split(outer_layout[0]);
 
         let mut selected_index_no_oob = self.history_table_state.selected().unwrap_or(0) as u32;
-        if selected_index_no_oob+1 >= self.game_history.history.len().try_into().unwrap() {
-            selected_index_no_oob = self.game_history.history.len() as u32 -1;
+        if selected_index_no_oob + 1 >= self.game_history.history.len().try_into().unwrap() {
+            selected_index_no_oob = self.game_history.history.len() as u32 - 1;
         }
-
 
         let table = render_table_from_history(&self.game_history);
         let qtable = render_table_from_questions(
@@ -508,6 +584,14 @@ impl MathGame {
 
         frame.render_stateful_widget(table, layout[0], &mut self.history_table_state);
         frame.render_widget(qtable, layout[1]);
+        render_sparkline_from(
+            frame,
+            layout[2],
+            &self.game_history.history[selected_index_no_oob.to_usize().unwrap()].answers,
+            Direction::Horizontal,
+        );
+
+        render_score_history_graph(frame, outer_layout[1], &self.game_history.history);
     }
 
     fn draw_end_splash(&mut self, frame: &mut Frame) {
@@ -538,12 +622,17 @@ impl MathGame {
 
         let table = render_table_from_questions(&self.answered_questions);
 
-        // render the widgetsI
+        // render the widgets
         // frame.render_widget(Block::bordered().border_set(border::ROUNDED), border_layout[0]);
         frame.render_widget(splash_para, layout[0]);
         frame.render_stateful_widget(table, layout[0], &mut self.result_table_state);
 
-        render_sparkline_from(frame, layout[1], &self.answered_questions);
+        render_sparkline_from(
+            frame,
+            layout[1],
+            &self.answered_questions,
+            Direction::Vertical,
+        );
     }
     // fn draw_end_splash()
 

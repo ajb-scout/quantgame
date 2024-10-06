@@ -11,8 +11,8 @@ impl Default for GameConfiguration {
     fn default() -> Self {
         Self { 
             endless: false, 
-            timer: 5, qr: 
-            QuestionRanges::default(),
+            timer: 15, 
+            qr: QuestionRanges::default(),
             debug: false,
             debug_questions: 72
         }
