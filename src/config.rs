@@ -22,8 +22,11 @@ impl Default for GameConfiguration {
 pub struct QuestionRanges {
     pub add_lower: i32,
     pub add_upper: i32,
-    pub mult_lower: i32,
-    pub mult_upper: i32,
+    pub mult_rhs_lower: i32,
+    pub mult_rhs_upper: i32,
+    pub mult_lhs_lower: i32,
+    pub mult_lhs_upper: i32,
+
 }
 
 impl Default for QuestionRanges {
@@ -31,8 +34,11 @@ impl Default for QuestionRanges {
         Self {
             add_lower: 2,
             add_upper: 100,
-            mult_lower: 2,
-            mult_upper: 12,
+            mult_lhs_lower: 2,
+            mult_lhs_upper: 12,
+            mult_rhs_lower: 2,
+            mult_rhs_upper: 100,
+
  }
     }
 }

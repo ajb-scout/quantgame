@@ -97,8 +97,8 @@ impl MathQuestion {
     fn generate_lhs_rhs(qr: &QuestionRanges, sign: &Sign) -> (i32, i32) {
         return match sign {
             Sign::Multiply => (
-                rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper),
-                rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper),
+                rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper),
+                rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper),
             ),
             Sign::Add => (
                 rand::thread_rng().gen_range(qr.add_lower..qr.add_upper),
@@ -113,8 +113,8 @@ impl MathQuestion {
                 (rhs, lhs)
             }
             Sign::Divide => {
-                let lhs = rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper);
-                let rhs = rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper);
+                let lhs = rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper);
+                let rhs = rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper);
                 let ans = lhs * rhs;
                 (ans, lhs)
         },
