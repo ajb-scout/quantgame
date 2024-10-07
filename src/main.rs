@@ -112,10 +112,12 @@ impl MathQuestion {
                 }
                 (rhs, lhs)
             }
-            Sign::Divide => (
-                rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper),
-                rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper),
-            ),
+            Sign::Divide => {
+                let lhs = rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper);
+                let rhs = rand::thread_rng().gen_range(qr.mult_lower..qr.mult_upper);
+                let ans = lhs * rhs;
+                (ans, lhs)
+        },
         };
     }
 
@@ -278,7 +280,7 @@ fn create_gradient(colors: &[f32]) -> Vec<Color> {
 }
 
 fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
-    let header = ["Question", "Answer", "Time"]
+    let header = ["Question", "Answer", "Time", "120s Pace"]
         .into_iter()
         .map(Cell::from)
         .collect::<Row>()
@@ -293,12 +295,15 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     let colors = create_gradient(&v);
 
     let mut rows: Vec<Row> = vec![];
+    let mut running_total: i64 = 0;
     for (x, i) in qs.iter().enumerate() {
+        let num_milis = (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds();
+        running_total += num_milis;
         let qstring = i.lhs.to_string() + " " + &i.sign.to_string() + " " + &i.rhs.to_string();
         let astring = i.answer.to_string();
-        let mut tstring = (i.question_answer.unwrap_or(Local::now()) - i.question_start)
-            .num_milliseconds()
-            .to_string();
+        let mut tstring = num_milis.to_string();
+        let running_average: f64 = 120000.0 / (running_total / (x as i64 + 1)) as f64;
+        let rstring = running_average.to_string();
         // tstring.insert(tstring.len() - 3, '.');
         tstring.push_str(" s");
         // let msstring = i.question_answer.unwrap().duration_since(i.question_start).as_millis().
@@ -307,6 +312,7 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
             Line::from(qstring),
             Line::from(astring),
             Line::from(tstring).style(Style::new().fg(colors[x])),
+            Line::from(rstring)
         ]));
     }
 
@@ -318,6 +324,8 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
             Constraint::Length(8),
             Constraint::Length(8),
             Constraint::Length(8),
+            Constraint::Length(8),
+
         ],
     )
     .header(header)
