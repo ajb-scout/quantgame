@@ -17,6 +17,8 @@ use ratatui::widgets::{
 };
 use ratatui::{layout, symbols};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt::format;
 use std::{fmt::Display, time::Instant};
 use std::{io, thread};
 
@@ -52,7 +54,8 @@ pub struct MathGame {
     score: i32,
     start_time: DateTime<Local>,
     current_time: DateTime<Local>,
-    answered_questions: Vec<MathQuestion>,
+    questions: Vec<MathQuestion>,
+    answers: Vec<MathAnswer>,
     gamestate: GameState,
     gameconfig: GameConfiguration,
     result_table_state: TableState,
@@ -73,7 +76,8 @@ impl Default for MathGame {
             score: Default::default(),
             start_time: Local::now(),
             current_time: Local::now(),
-            answered_questions: vec![],
+            questions: vec![],
+            answers: vec![],
             gamestate: GameState::Setup,
             gameconfig: config,
             result_table_state: TableState::default().with_selected(0),
@@ -93,7 +97,34 @@ pub struct MathQuestion {
     question_answer: Option<DateTime<Local>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MathAnswer {
+    q: MathQuestion,
+    string_representation: String,
+    duration_s: i64,
+    duration_m: i64,
+}
+
 impl MathQuestion {
+    fn generate_math_answer(self) -> MathAnswer {
+        let srep = format!(
+            "{:<3} {} {:<3}",
+            self.lhs.to_string(),
+            self.sign.to_string(),
+            self.rhs.to_string()
+        );
+        let duration_s =
+            (self.question_start - self.question_answer.unwrap_or(Local::now())).num_seconds();
+        let duration_m =
+            (self.question_start - self.question_answer.unwrap_or(Local::now())).num_milliseconds();
+        return MathAnswer {
+            q: self,
+            string_representation: srep,
+            duration_s: duration_s,
+            duration_m: duration_m,
+        };
+    }
+
     fn generate_lhs_rhs(qr: &QuestionRanges, sign: &Sign) -> (i32, i32) {
         return match sign {
             Sign::Multiply => (
@@ -117,7 +148,7 @@ impl MathQuestion {
                 let rhs = rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper);
                 let ans = lhs * rhs;
                 (ans, lhs)
-        },
+            }
         };
     }
 
@@ -144,7 +175,7 @@ impl MathQuestion {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 enum Sign {
     Multiply,
     Add,
@@ -187,6 +218,26 @@ fn apply_sign(sign: &Sign, lhs: i32, rhs: i32) -> i32 {
         Sign::Subtract => lhs - rhs,
         Sign::Divide => lhs / rhs,
     };
+}
+
+fn display_result_summary(qs: &Vec<MathQuestion>) -> Paragraph {
+    let title: Title = Title::from("Results");
+
+    let grouped_sums: HashMap<Sign, i32> = qs.into_iter().fold(HashMap::new(), |mut acc, item| {
+        *acc.entry(item.sign).or_insert(0) += 1;
+        acc
+    });
+
+    let mut line_vec = vec![];
+    line_vec.push(Line::from(format!("Score: {}", qs.len() - 1)));
+
+    for (s, i) in grouped_sums {
+        line_vec.push(Line::from(
+            format!["{:<8}: {}", s.to_string(), i]
+        ));
+    }
+
+    Paragraph::new(line_vec).block(Block::bordered().title(title))
 }
 
 impl Widget for &MathGame {
@@ -297,7 +348,8 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     let mut rows: Vec<Row> = vec![];
     let mut running_total: i64 = 0;
     for (x, i) in qs.iter().enumerate() {
-        let num_milis = (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds();
+        let num_milis =
+            (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds();
         running_total += num_milis;
         let qstring = i.lhs.to_string() + " " + &i.sign.to_string() + " " + &i.rhs.to_string();
         let astring = i.answer.to_string();
@@ -312,7 +364,7 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
             Line::from(qstring),
             Line::from(astring),
             Line::from(tstring).style(Style::new().fg(colors[x])),
-            Line::from(rstring)
+            Line::from(rstring),
         ]));
     }
 
@@ -325,7 +377,6 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
             Constraint::Length(8),
             Constraint::Length(8),
             Constraint::Length(8),
-
         ],
     )
     .header(header)
@@ -345,18 +396,11 @@ fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
     ]));
     return table;
 }
-fn render_score_history_graph(
-    frame: &mut Frame,
-    area: Rect,
-    history: &Vec<GameRecord>,
-) {
+fn render_score_history_graph(frame: &mut Frame, area: Rect, history: &Vec<GameRecord>) {
     let mut d1: Vec<(f64, f64)> = vec![];
 
     for (i, q) in history.iter().enumerate() {
-        d1.push((
-            i as f64,
-            q.score as f64
-        ));
+        d1.push((i as f64, q.score as f64));
     }
 
     let datasets = vec![
@@ -408,8 +452,6 @@ fn render_score_history_graph(
 
     frame.render_widget(chart, area);
 }
-
-
 
 //TODO - can I change this so that it no longer renders in place and instrad returns a chart object?
 fn render_sparkline_from(
@@ -526,6 +568,40 @@ fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Durati
 }
 
 impl MathGame {
+    fn handle_game_start(mut self) {
+        self.score = 0;
+        self.answers = vec![];
+        self.questions = vec![];
+        self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
+        self.current_time = Local::now();
+        self.start_time = Local::now();
+        self.gamestate = GameState::Inprogress;
+    }
+
+    fn handle_game_end(&mut self) {
+        self.current_question.question_answer = Some(Local::now());
+        self.questions.push(self.current_question);
+        //this will panic if too long. TODO fix
+        self.gamestate = GameState::EndingSplash;
+        self.game_history.add_game_result(GameRecord {
+            game_intant: Utc::now(),
+            score: self.score,
+            answers: self.questions.clone(),
+        });
+
+        self.answers = self
+            .questions
+            .iter()
+            .map(|f| f.generate_math_answer())
+            .collect();
+        let _ = self.game_history.save();
+        self.gamestate = GameState::EndingSplash;
+    }
+
+    fn handle_game_restart(mut self) {
+        self.handle_game_start();
+    }
+
     fn draw_splash(&self, frame: &mut Frame) {
         let outer_layout: std::rc::Rc<[Rect]> = Layout::new(
             Direction::Vertical,
@@ -568,7 +644,8 @@ impl MathGame {
         let outer_layout = Layout::new(
             Direction::Vertical,
             vec![Constraint::Percentage(80), Constraint::Percentage(20)],
-        ).split(frame.area());
+        )
+        .split(frame.area());
 
         let layout: std::rc::Rc<[Rect]> = Layout::new(
             Direction::Horizontal,
@@ -613,9 +690,9 @@ impl MathGame {
         .split(border_layout[0]);
         let inner_layout = Layout::new(
             Direction::Horizontal,
-            vec![Constraint::Percentage(100), Constraint::Percentage(0)],
+            vec![Constraint::Percentage(30), Constraint::Percentage(70)],
         )
-        .split(layout[1]);
+        .split(layout[0]);
 
         // build text objects
         let splash_text = Text::from(
@@ -623,24 +700,14 @@ impl MathGame {
         )
         .alignment(Alignment::Left);
 
-        // build splash para
-        let splash_para = Paragraph::new(splash_text)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: false });
-
-        let table = render_table_from_questions(&self.answered_questions);
+        let table = render_table_from_questions(&self.questions);
 
         // render the widgets
         // frame.render_widget(Block::bordered().border_set(border::ROUNDED), border_layout[0]);
-        frame.render_widget(splash_para, layout[0]);
-        frame.render_stateful_widget(table, layout[0], &mut self.result_table_state);
+        frame.render_widget(display_result_summary(&self.questions), inner_layout[0]);
+        frame.render_stateful_widget(table, inner_layout[1], &mut self.result_table_state);
 
-        render_sparkline_from(
-            frame,
-            layout[1],
-            &self.answered_questions,
-            Direction::Vertical,
-        );
+        render_sparkline_from(frame, layout[1], &self.questions, Direction::Vertical);
     }
     // fn draw_end_splash()
 
@@ -687,7 +754,7 @@ impl MathGame {
                 self.score += 1;
                 self.input.clear();
                 self.current_question.question_answer = Some(Local::now());
-                self.answered_questions.push(self.current_question);
+                self.questions.push(self.current_question);
 
                 self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
 
@@ -704,22 +771,10 @@ impl MathGame {
 
             // game over on timeout
             if self.gamestate == GameState::Inprogress
-                && (self.current_time - self.start_time).num_seconds()
-                    > self.gameconfig.timer.try_into().unwrap()
+                && (self.current_time - self.start_time).num_seconds() as i32
+                    > self.gameconfig.timer
             {
-                if self.answered_questions.last().is_some() {
-                    // self.answered_questions.last().unwrap().question_answer = Some(Instant::now());
-                }
-                self.current_question.question_answer = Some(Local::now());
-                self.answered_questions.push(self.current_question);
-                //this will panic if too long. TODO fix
-                self.gamestate = GameState::EndingSplash;
-                self.game_history.add_game_result(GameRecord {
-                    game_intant: Utc::now(),
-                    score: self.score,
-                    answers: self.answered_questions.clone(),
-                });
-                let _ = self.game_history.save();
+                self.handle_game_end();
             }
         }
         Ok(())
@@ -806,7 +861,7 @@ impl MathGame {
             self.score += 1;
             self.input.clear();
             self.current_question.question_answer = Some(Local::now());
-            self.answered_questions.push(self.current_question);
+            self.questions.push(self.current_question);
 
             self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
         }
