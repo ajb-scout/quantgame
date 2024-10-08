@@ -10,7 +10,7 @@ use chrono::serde::ts_nanoseconds;
 use ratatui::widgets::*;
 use chrono::{DateTime, Local, Utc};
 
-use crate::MathQuestion;
+use crate::{MathAnswer, MathQuestion};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameHistory {
@@ -24,7 +24,13 @@ pub struct GameRecord {
     #[serde(with = "ts_nanoseconds")]
     pub game_intant: DateTime<Utc>,
     pub score: i32, 
-    pub answers: Vec<MathQuestion>
+    pub answers: Vec<MathAnswer>
+}
+
+impl Default for GameHistory {
+    fn default() -> Self {
+        Self { path: Default::default(), history: Default::default() }
+    }
 }
 
 

@@ -15,10 +15,11 @@ use ratatui::widgets::{
     Axis, Bar, BarChart, BarGroup, BorderType, Borders, Chart, Dataset, GraphType, ScrollbarState,
     Sparkline,
 };
-use ratatui::{layout, symbols};
+use ratatui::{symbols};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::format;
+use std::thread::sleep;
 use std::{fmt::Display, time::Instant};
 use std::{io, thread};
 
@@ -82,7 +83,7 @@ impl Default for MathGame {
             gameconfig: config,
             result_table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::default(),
-            game_history: GameHistory::new("results.json").unwrap(),
+            game_history: GameHistory::new("results.json").unwrap_or_default(),
             history_table_state: TableState::default().with_selected(0),
         }
     }
@@ -114,9 +115,9 @@ impl MathQuestion {
             self.rhs.to_string()
         );
         let duration_s =
-            (self.question_start - self.question_answer.unwrap_or(Local::now())).num_seconds();
+            (self.question_answer.unwrap_or(Local::now()) - self.question_start).num_seconds();
         let duration_m =
-            (self.question_start - self.question_answer.unwrap_or(Local::now())).num_milliseconds();
+            (self.question_answer.unwrap_or(Local::now()) - self.question_start).num_milliseconds();
         return MathAnswer {
             q: self,
             string_representation: srep,
@@ -174,6 +175,12 @@ impl MathQuestion {
         return new_question;
     }
 }
+async fn timer(game_state: &mut MathGame) {
+    while game_state.get_elapsed_time_seconds() < game_state.gameconfig.timer {
+        sleep(Duration::from_secs(1));
+        game_state.current_time = Local::now();
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 enum Sign {
@@ -220,21 +227,19 @@ fn apply_sign(sign: &Sign, lhs: i32, rhs: i32) -> i32 {
     };
 }
 
-fn display_result_summary(qs: &Vec<MathQuestion>) -> Paragraph {
+fn display_result_summary(ans: &Vec<MathAnswer>) -> Paragraph {
     let title: Title = Title::from("Results");
 
-    let grouped_sums: HashMap<Sign, i32> = qs.into_iter().fold(HashMap::new(), |mut acc, item| {
-        *acc.entry(item.sign).or_insert(0) += 1;
+    let grouped_sums: HashMap<Sign, i32> = ans.into_iter().fold(HashMap::new(), |mut acc, item| {
+        *acc.entry(item.q.sign).or_insert(0) += 1;
         acc
     });
 
     let mut line_vec = vec![];
-    line_vec.push(Line::from(format!("Score: {}", qs.len() - 1)));
+    line_vec.push(Line::from(format!("Score: {}", ans.len() - 1)));
 
     for (s, i) in grouped_sums {
-        line_vec.push(Line::from(
-            format!["{:<8}: {}", s.to_string(), i]
-        ));
+        line_vec.push(Line::from(format!["{:<8}: {}", s.to_string(), i]));
     }
 
     Paragraph::new(line_vec).block(Block::bordered().title(title))
@@ -248,21 +253,21 @@ impl Widget for &MathGame {
             " Score:  ".into(),
             self.score.to_string().bold(),
             "  Elapsed:  ".into(),
-            (self.current_time - self.start_time)
-                .num_seconds()
+            self.get_elapsed_time_seconds()
                 .to_string()
                 .bold(),
             " ".into(),
         ]));
 
         let block = Block::bordered()
-            .title(title.alignment(Alignment::Center))
+            // .title(title.alignment(Alignment::Center))
+            
             .title(
                 score
                     .alignment(Alignment::Center)
-                    .position(Position::Bottom),
+                    .position(Position::Top),
             )
-            .border_set(border::ROUNDED);
+            .border_set(border::DOUBLE);
 
         let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
         let mut input_line = Span::from(self.input.clone().white());
@@ -330,30 +335,23 @@ fn create_gradient(colors: &[f32]) -> Vec<Color> {
         .collect()
 }
 
-fn render_table_from_questions(qs: &Vec<MathQuestion>) -> Table {
+fn render_table_from_questions(qs: &Vec<MathAnswer>) -> Table {
     let header = ["Question", "Answer", "Time", "120s Pace"]
         .into_iter()
         .map(Cell::from)
         .collect::<Row>()
         .height(2);
-    let v = qs
-        .iter()
-        .map(|i| {
-            (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds() as f32
-        })
-        .collect::<Vec<f32>>();
+    let v = qs.iter().map(|f| f.duration_m as f32).collect::<Vec<f32>>();
 
     let colors = create_gradient(&v);
 
     let mut rows: Vec<Row> = vec![];
     let mut running_total: i64 = 0;
     for (x, i) in qs.iter().enumerate() {
-        let num_milis =
-            (i.question_answer.unwrap_or(Local::now()) - i.question_start).num_milliseconds();
-        running_total += num_milis;
-        let qstring = i.lhs.to_string() + " " + &i.sign.to_string() + " " + &i.rhs.to_string();
-        let astring = i.answer.to_string();
-        let mut tstring = num_milis.to_string();
+        running_total += i.duration_m;
+        let qstring = i.string_representation.to_string();
+        let astring = i.q.answer.to_string();
+        let mut tstring = i.duration_m.to_string();
         let running_average: f64 = 120000.0 / (running_total / (x as i64 + 1)) as f64;
         let rstring = running_average.to_string();
         // tstring.insert(tstring.len() - 3, '.');
@@ -457,16 +455,14 @@ fn render_score_history_graph(frame: &mut Frame, area: Rect, history: &Vec<GameR
 fn render_sparkline_from(
     frame: &mut Frame,
     area: Rect,
-    qs: &Vec<MathQuestion>,
+    qs: &Vec<MathAnswer>,
     orientation: Direction,
+    title: String
 ) {
     let mut d1: Vec<(f64, f64)> = vec![];
 
     for (i, q) in qs.iter().enumerate() {
-        d1.push((
-            i as f64,
-            ((q.question_answer.unwrap()) - (q.question_start)).num_milliseconds() as f64,
-        ));
+        d1.push((i as f64, q.duration_m as f64));
     }
 
     let colors = create_gradient(&d1.iter().map(|f| f.1 as f32).collect::<Vec<f32>>());
@@ -476,12 +472,9 @@ fn render_sparkline_from(
         .enumerate()
         .map(|(u, f)| {
             Bar::default()
-                .value((f.question_answer.unwrap() - f.question_start).num_milliseconds() as u64)
+                .value(f.duration_m as u64)
                 .style(colors[u])
-                .text_value(format!(
-                    "{:<6}ms ",
-                    (f.question_answer.unwrap() - f.question_start).num_milliseconds()
-                ))
+                .text_value(format!("{:<6}ms ", f.duration_m))
                 .value_style(colors[u])
         })
         .collect();
@@ -504,6 +497,7 @@ fn render_sparkline_from(
         .value_style(Style::new().red().bold())
         .label_style(Style::new().white())
         .data(BarGroup::default().bars(&bars));
+    // .data(BarGroup::default().bars(&[1,2,3].map(|f| Bar::from(Bar::default().value(f)))));
     // Create the X axis and define its properties
     let binding = d1.len().to_string();
     let x_axis = Axis::default()
@@ -535,7 +529,7 @@ fn render_sparkline_from(
 
     // Create the chart and link all the parts together
     let chart = Chart::new(datasets)
-        .block(Block::new().title("Chart"))
+        .block(Block::new().title(title))
         .x_axis(x_axis)
         .y_axis(y_axis);
 
@@ -568,7 +562,11 @@ fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Durati
 }
 
 impl MathGame {
-    fn handle_game_start(mut self) {
+
+    fn get_elapsed_time_seconds(&self) -> i32{
+        return (Local::now() - self.start_time).num_seconds() as i32
+    }
+    fn handle_game_start(&mut self) {
         self.score = 0;
         self.answers = vec![];
         self.questions = vec![];
@@ -578,28 +576,29 @@ impl MathGame {
         self.gamestate = GameState::Inprogress;
     }
 
-    fn handle_game_end(&mut self) {
+    fn handle_game_end(&mut self, save: bool) {
         self.current_question.question_answer = Some(Local::now());
         self.questions.push(self.current_question);
-        //this will panic if too long. TODO fix
-        self.gamestate = GameState::EndingSplash;
-        self.game_history.add_game_result(GameRecord {
-            game_intant: Utc::now(),
-            score: self.score,
-            answers: self.questions.clone(),
-        });
-
         self.answers = self
             .questions
             .iter()
             .map(|f| f.generate_math_answer())
             .collect();
-        let _ = self.game_history.save();
+
+        //this will panic if too long. TODO fix
+        self.game_history.add_game_result(GameRecord {
+            game_intant: Utc::now(),
+            score: self.score,
+            answers: self.answers.clone(),
+        });
+        if save {
+            let _ = self.game_history.save();
+        }
         self.gamestate = GameState::EndingSplash;
     }
 
-    fn handle_game_restart(mut self) {
-        self.handle_game_start();
+    fn handle_game_restart(&mut self) {
+        &self.handle_game_start();
     }
 
     fn draw_splash(&self, frame: &mut Frame) {
@@ -657,24 +656,35 @@ impl MathGame {
         )
         .split(outer_layout[0]);
 
+        //get the state as the index unless nothing selected in which case set to zero
         let mut selected_index_no_oob = self.history_table_state.selected().unwrap_or(0) as u32;
-        if selected_index_no_oob + 1 >= self.game_history.history.len().try_into().unwrap() {
-            selected_index_no_oob = self.game_history.history.len() as u32 - 1;
+        if self.game_history.history.len() == 0 {
+            selected_index_no_oob = 0;
+        } else if selected_index_no_oob + 1
+            >= self.game_history.history.len().try_into().unwrap_or(0)
+        {
+            if self.game_history.history.len() == 0 {
+                selected_index_no_oob = 0
+            } else {
+                selected_index_no_oob = self.game_history.history.len() as u32 - 1;
+            }
         }
 
         let table = render_table_from_history(&self.game_history);
-        let qtable = render_table_from_questions(
-            &self.game_history.history[selected_index_no_oob.to_usize().unwrap()].answers,
-        );
+        let selected_history = &self
+            .game_history
+            .history
+            .get(selected_index_no_oob.to_usize().unwrap());
+        let history_answers = match selected_history {
+            Some(x) => &x.answers,
+            None => &vec![],
+        };
+
+        let qtable = render_table_from_questions(history_answers);
 
         frame.render_stateful_widget(table, layout[0], &mut self.history_table_state);
         frame.render_widget(qtable, layout[1]);
-        render_sparkline_from(
-            frame,
-            layout[2],
-            &self.game_history.history[selected_index_no_oob.to_usize().unwrap()].answers,
-            Direction::Horizontal,
-        );
+        render_sparkline_from(frame, layout[2], history_answers, Direction::Horizontal, "Best Scores".to_string());
 
         render_score_history_graph(frame, outer_layout[1], &self.game_history.history);
     }
@@ -700,14 +710,14 @@ impl MathGame {
         )
         .alignment(Alignment::Left);
 
-        let table = render_table_from_questions(&self.questions);
+        let table = render_table_from_questions(&self.answers);
 
         // render the widgets
         // frame.render_widget(Block::bordered().border_set(border::ROUNDED), border_layout[0]);
-        frame.render_widget(display_result_summary(&self.questions), inner_layout[0]);
+        frame.render_widget(display_result_summary(&self.answers), inner_layout[0]);
         frame.render_stateful_widget(table, inner_layout[1], &mut self.result_table_state);
 
-        render_sparkline_from(frame, layout[1], &self.questions, Direction::Vertical);
+        render_sparkline_from(frame, layout[1], &self.answers, Direction::Vertical, "Results".to_string());
     }
     // fn draw_end_splash()
 
@@ -765,7 +775,8 @@ impl MathGame {
                 poll(Duration::from_millis(10))?;
                 {
                     //pings crossterm for input every 10ms
-                    self.handle_events()?;
+                    let _ = self.handle_events();
+
                 }
             }
 
@@ -774,7 +785,7 @@ impl MathGame {
                 && (self.current_time - self.start_time).num_seconds() as i32
                     > self.gameconfig.timer
             {
-                self.handle_game_end();
+                self.handle_game_end(true);
             }
         }
         Ok(())
@@ -845,16 +856,17 @@ impl MathGame {
 
     fn handle_key_event_game(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Backspace => {
-                self.input.pop();
-            }
-            KeyCode::Delete => {
-                self.input.pop();
-            }
+            KeyCode::Char('q') => &self.exit(),
+            KeyCode::Char('r') => &self.handle_game_restart(),
+            KeyCode::Backspace => &{
+                let _ = &self.input.pop();
+            },
+            KeyCode::Delete => &{
+                let _ = &self.input.pop();
+            },
 
-            _ => self.input.push_str(&key_event.code.to_string()),
-        }
+            _ => &self.input.push_str(&key_event.code.to_string()),
+        };
 
         let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
         if solved {
@@ -862,7 +874,6 @@ impl MathGame {
             self.input.clear();
             self.current_question.question_answer = Some(Local::now());
             self.questions.push(self.current_question);
-
             self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
         }
     }
