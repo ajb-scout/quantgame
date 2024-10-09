@@ -10,7 +10,7 @@ use chrono::serde::ts_nanoseconds;
 use ratatui::widgets::*;
 use chrono::{DateTime, Local, Utc};
 
-use crate::{MathAnswer, MathQuestion};
+use crate::MathAnswer;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameHistory {
@@ -78,48 +78,3 @@ impl GameHistory {
     }
 }
 
-pub fn render_table_from_history(hs: &GameHistory) -> Table {
-    let header = ["#", "Date", "Score"]
-        .into_iter()
-        .map(Cell::from)
-        .collect::<Row>()
-        .height(2);
-
-
-    let mut rows: Vec<Row> = vec![];
-    for (x, i) in hs.history.iter().enumerate() {
-        rows.push(Row::new(vec![
-            Line::from(x.to_string()),
-            Line::from(i.game_intant.to_string()),
-            Line::from(i.score.to_string()),
-        ]));
-    }
-
-    let bar = " █ ";
-
-    let table = Table::new(
-        rows,
-        [
-            // + 1 is for padding.
-            Constraint::Length(6),
-            Constraint::Length(10),
-            Constraint::Length(8),
-        ],
-    )
-    .header(header)
-    .block(
-        Block::bordered()
-            .title("Table")
-            .border_type(BorderType::Rounded),
-    )
-    .highlight_style(Style::new().bg(Color::DarkGray))
-    .highlight_symbol(">>")
-    .column_spacing(1)
-    .highlight_symbol(Text::from(vec![
-        "".into(),
-        bar.into(),
-        bar.into(),
-        "".into(),
-    ]));
-    return table;
-}
