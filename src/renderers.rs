@@ -1,8 +1,15 @@
-pub mod table;
 pub mod charts;
 pub mod screen;
+pub mod table;
 
-use ratatui::{layout::{Alignment, Constraint, Direction, Layout}, style::Stylize, symbols::border, text::{Line, Span, Text}, widgets::{Block, Paragraph, Wrap}, Frame};
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::Stylize,
+    symbols::border,
+    text::{Line, Span, Text},
+    widgets::{Block, Paragraph, Wrap},
+    Frame,
+};
 
 use crate::game::MathGame;
 
@@ -29,7 +36,6 @@ pub fn render_game_splash(frame: &mut Frame, _game: &mut MathGame) {
         // + (Span::from("S") + Span::from("e").underlined().bold() + Span::from("ttings"))
         + (Span::from("H").underlined().bold() + Span::from("istory"))
         + (Span::from("Q").underlined().bold() + Span::from("uit"));
-
 
     // build splash para
     let splash_para = Paragraph::new(splash_text)
@@ -62,7 +68,13 @@ pub fn render_end_splash(frame: &mut Frame, game: &mut MathGame) {
 
     screen::display_result_summary(frame, inner_layout[0], &game);
     table::render_table_from_questions(frame, inner_layout[1], game);
-    charts::render_question_time_barchart(frame, layout[1], &game, Direction::Vertical, "Results".to_string());
+    charts::render_question_time_barchart(
+        frame,
+        layout[1],
+        &game,
+        Direction::Vertical,
+        "Results".to_string(),
+    );
 }
 // fn draw_end_splash()
 
@@ -82,11 +94,16 @@ pub fn render_history_splash(frame: &mut Frame, game: &mut MathGame) {
         ],
     )
     .split(outer_layout[0]);
-    
+
     // let qtable = render_table_from_questions(history_answers);
     table::render_table_from_history(frame, layout[0], game);
     table::render_table_from_questions(frame, layout[1], game);
-    charts::render_question_time_barchart(frame, layout[2], game, Direction::Horizontal, "Times".to_string());
+    charts::render_question_time_barchart(
+        frame,
+        layout[2],
+        game,
+        Direction::Horizontal,
+        "Times".to_string(),
+    );
     charts::render_score_history_graph(frame, outer_layout[1], game);
 }
-

@@ -9,7 +9,6 @@ use ratatui::{
 use crate::{game::MathGame, util::get_target_answers};
 
 pub fn render_table_from_questions(frame: &mut Frame, area: Rect, game: &mut MathGame) {
-
     let target_answers = get_target_answers(game); //if we are in history, show a historical answer set
 
     let header = ["Question", "Answer", "Time", "120s Pace"]
@@ -74,11 +73,7 @@ pub fn render_table_from_questions(frame: &mut Frame, area: Rect, game: &mut Mat
     frame.render_stateful_widget(table, area, &mut game.result_table_state);
 }
 
-pub fn render_table_from_history(
-    frame: &mut Frame,
-    area: Rect,
-    game: &mut MathGame,
-) {
+pub fn render_table_from_history(frame: &mut Frame, area: Rect, game: &mut MathGame) {
     let header = ["#", "Date", "Score"]
         .into_iter()
         .map(Cell::from)

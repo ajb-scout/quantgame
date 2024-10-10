@@ -9,15 +9,13 @@ pub fn handle_events(game: &mut MathGame) -> io::Result<()> {
     match event::read()? {
         // it's important to check that the event is a key press event as
         // crossterm also emits key release and repeat events on Windows.
-        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-            match game.gamestate {
-                GameState::Setup => handle_key_event_splash(game,key_event),
-                GameState::Inprogress => handle_key_event_game(game,key_event),
-                GameState::EndingSplash => handle_end_event_splash(game, key_event),
-                GameState::HistorySplash => handle_key_event_history(game,key_event),
-                GameState::SettingsSpash => handle_key_event_game(game, key_event),
-            }
-        }
+        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => match game.gamestate {
+            GameState::Setup => handle_key_event_splash(game, key_event),
+            GameState::Inprogress => handle_key_event_game(game, key_event),
+            GameState::EndingSplash => handle_end_event_splash(game, key_event),
+            GameState::HistorySplash => handle_key_event_history(game, key_event),
+            GameState::SettingsSpash => handle_key_event_game(game, key_event),
+        },
         _ => {}
     };
     Ok(())
@@ -73,10 +71,10 @@ fn handle_key_event_game(game: &mut MathGame, key_event: KeyEvent) {
         KeyCode::Char('r') => game.handle_game_restart(),
         KeyCode::Backspace => {
             let _ = &game.input.pop();
-        },
+        }
         KeyCode::Delete => {
             let _ = &game.input.pop();
-        },
+        }
 
         _ => game.input.push_str(&key_event.code.to_string()),
     };

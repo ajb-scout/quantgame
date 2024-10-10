@@ -1,9 +1,9 @@
 mod config;
-mod history;
+pub mod event_handlers;
 pub mod game;
+mod history;
 pub mod renderers;
 pub mod util;
-pub mod event_handlers;
 
 use game::{MathAnswer, MathGame};
 use std::io;

@@ -18,9 +18,12 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 
-use crate::{config::{GameConfiguration, QuestionRanges}, history::{GameHistory, GameRecord}, renderers::{render_end_splash, render_game_splash}, util::{self, Sign}};
-
-
+use crate::{
+    config::{GameConfiguration, QuestionRanges},
+    history::{GameHistory, GameRecord},
+    renderers::{render_end_splash, render_game_splash},
+    util::{self, Sign},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum GameState {
@@ -91,8 +94,8 @@ impl Default for MathGame {
 }
 
 impl MathGame {
-    pub fn get_elapsed_time_seconds(&self) -> i32{
-        return (Local::now() - self.start_time).num_seconds() as i32
+    pub fn get_elapsed_time_seconds(&self) -> i32 {
+        return (Local::now() - self.start_time).num_seconds() as i32;
     }
     pub fn handle_game_start(&mut self) {
         self.score = 0;
@@ -128,8 +131,6 @@ impl MathGame {
     pub fn handle_game_restart(&mut self) {
         let _ = &self.handle_game_start();
     }
-
-
 
     fn draw(&self, frame: &mut Frame) {
         let layout: std::rc::Rc<[Rect]> =
@@ -186,7 +187,6 @@ impl MathGame {
                 {
                     //pings crossterm for input every 10ms
                     let _ = crate::event_handlers::handle_events(self);
-
                 }
             }
 
@@ -201,13 +201,10 @@ impl MathGame {
         Ok(())
     }
 
-
-
     pub fn exit(&mut self) {
         self.exit = true;
     }
 }
-
 
 impl Widget for &MathGame {
     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -220,11 +217,7 @@ impl Widget for &MathGame {
         ]));
 
         let block: Block<'_> = Block::bordered()
-            .title(
-                score
-                    .alignment(Alignment::Center)
-                    .position(Position::Top),
-            )
+            .title(score.alignment(Alignment::Center).position(Position::Top))
             .border_set(border::DOUBLE);
         let input_line = Span::from(self.input.clone().white());
 
@@ -233,7 +226,9 @@ impl Widget for &MathGame {
             Line::from(vec![
                 self.current_question.lhs.to_string().into(),
                 " ".into(),
-                util::match_sign(&self.current_question.sign).to_string().into(),
+                util::match_sign(&self.current_question.sign)
+                    .to_string()
+                    .into(),
                 " ".into(),
                 self.current_question.rhs.to_string().into(),
                 " = ".into(),
@@ -249,8 +244,6 @@ impl Widget for &MathGame {
     }
 }
 
-
-
 impl MathQuestion {
     fn generate_math_answer(self) -> MathAnswer {
         let srep = format!(
@@ -259,7 +252,8 @@ impl MathQuestion {
             self.sign.to_string(),
             self.rhs.to_string()
         );
-        let duration_s = (self.question_answer.unwrap_or(Local::now()) - self.question_start).num_seconds();
+        let duration_s =
+            (self.question_answer.unwrap_or(Local::now()) - self.question_start).num_seconds();
         let duration_m =
             (self.question_answer.unwrap_or(Local::now()) - self.question_start).num_milliseconds();
         return MathAnswer {

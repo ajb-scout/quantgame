@@ -115,10 +115,16 @@ pub fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Du
         .collect()
 }
 
-pub fn get_target_answers(game: &MathGame) -> &Vec<MathAnswer>{
+pub fn get_target_answers(game: &MathGame) -> &Vec<MathAnswer> {
     match game.gamestate {
-        crate::game::GameState::HistorySplash => {&game.game_history.history[game.history_table_state.selected().unwrap_or_default().min(game.game_history.history.len() -1)].answers},
-        _ => {&game.answers}
+        crate::game::GameState::HistorySplash => {
+            &game.game_history.history[game
+                .history_table_state
+                .selected()
+                .unwrap_or_default()
+                .min(game.game_history.history.len() - 1)]
+            .answers
+        }
+        _ => &game.answers,
     }
-
 }
