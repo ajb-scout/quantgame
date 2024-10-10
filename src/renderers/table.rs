@@ -1,8 +1,8 @@
 use ratatui::{
     layout::{Constraint, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, BorderType, Cell, Row, Table},
+    widgets::{block::Title, Block, BorderType, Cell, Row, Table},
     Frame,
 };
 
@@ -10,6 +10,12 @@ use crate::{game::MathGame, util::get_target_answers};
 
 pub fn render_table_from_questions(frame: &mut Frame, area: Rect, game: &mut MathGame) {
     let target_answers = get_target_answers(game); //if we are in history, show a historical answer set
+    let instructions = Title::from(Line::from(vec![
+        " Quit ".into(),
+        "<Q>".blue().bold(),
+        " Return to Start ".into(),
+        "<D> ".blue().bold(),
+    ]));
 
     let header = ["Question", "Answer", "Time", "120s Pace"]
         .into_iter()
@@ -57,6 +63,7 @@ pub fn render_table_from_questions(frame: &mut Frame, area: Rect, game: &mut Mat
     .block(
         Block::bordered()
             .title("Question Table")
+            .title(instructions.alignment(ratatui::layout::Alignment::Center).position(ratatui::widgets::block::Position::Bottom))
             .border_type(BorderType::Rounded),
     )
     .highlight_style(Style::new().bg(Color::DarkGray))

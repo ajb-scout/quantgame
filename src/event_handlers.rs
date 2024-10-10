@@ -29,6 +29,8 @@ pub fn handle_events(key_event: KeyEvent, game: &mut MathGame) -> io::Result<()>
 fn handle_end_event_splash(game: &mut MathGame, key_event: KeyEvent) {
     match key_event.code {
         KeyCode::Char('q') => game.exit(),
+        KeyCode::Char('d') => game.handle_return_to_splash(),
+
         KeyCode::Up => game.result_table_state.select_previous(),
         KeyCode::Down => game.result_table_state.select_next(),
         _ => {}
@@ -38,6 +40,8 @@ fn handle_end_event_splash(game: &mut MathGame, key_event: KeyEvent) {
 fn handle_key_event_history(game: &mut MathGame, key_event: KeyEvent) {
     match key_event.code {
         KeyCode::Char('q') => game.exit(),
+        KeyCode::Char('d') => game.handle_return_to_splash(),
+
         KeyCode::Up => game.history_table_state.select_previous(),
         KeyCode::Down => game.history_table_state.select_next(),
         _ => {}
@@ -75,6 +79,9 @@ fn handle_key_event_game(game: &mut MathGame, key_event: KeyEvent) {
     match key_event.code {
         KeyCode::Char('q') => game.exit(),
         KeyCode::Char('r') => game.handle_game_restart(),
+        KeyCode::Char('e') => game.handle_game_end(true),
+        KeyCode::Char('d') => game.handle_return_to_splash(),
+
         KeyCode::Backspace => {
             let _ = &game.input.pop();
         }

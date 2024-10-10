@@ -1,10 +1,11 @@
 use std::{fmt::Display, time::Duration};
 
+use futures::io::empty;
 use rand_distr::{Distribution, Normal};
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
-use crate::game::{MathAnswer, MathGame};
+use crate::game::{GameState, MathAnswer, MathGame};
 
 pub const ASCII_TITLE: [&str; 5] = [
     "   ____                   _     ___                     ",
@@ -116,15 +117,18 @@ pub fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Du
 }
 
 pub fn get_target_answers(game: &MathGame) -> &Vec<MathAnswer> {
+    static EMPTY_ANSWERS: Vec<MathAnswer> = Vec::new(); // Static empty vector
+
     match game.gamestate {
         crate::game::GameState::HistorySplash => {
-            &game.game_history.history[game
-                .history_table_state
-                .selected()
-                .unwrap_or_default()
-                .min(game.game_history.history.len() - 1)]
-            .answers
-        }
+            if game.game_history.history.is_empty() {
+                &EMPTY_ANSWERS // Create a new Vec and return a reference to it
+            } else {
+                &game.game_history.history[
+                    game.history_table_state.selected().unwrap_or_default().min(game.game_history.history.len() - 1)
+                ].answers
+            }
+            }
         _ => &game.answers,
     }
 }

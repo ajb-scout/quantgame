@@ -108,6 +108,11 @@ impl MathGame {
         self.gamestate = GameState::Inprogress;
     }
 
+    pub fn handle_return_to_splash(&mut self){
+        self.gamestate = GameState::Setup;
+        self.result_table_state.select_first();
+    }
+
     pub fn handle_game_end(&mut self, save: bool) {
         self.current_question.question_answer = Some(Local::now());
         self.questions.push(self.current_question);
@@ -124,7 +129,11 @@ impl MathGame {
             answers: self.answers.clone(),
         });
         if save {
-            let _ = self.game_history.save();
+            let saved = self.game_history.save();
+            match saved {
+                Ok(_) => {},
+                Err(e) => panic!("{}", e),
+            }
         }
         self.gamestate = GameState::EndingSplash;
     }
@@ -217,8 +226,21 @@ impl Widget for &MathGame {
             " ".into(),
         ]));
 
+            let instructions = Title::from(Line::from(vec![
+                " Reset ".into(),
+                "<R>".blue().bold(),
+                " Quit ".into(),
+                "<Q>".blue().bold(),
+                " Return to Start ".into(),
+                "<D> ".blue().bold(),
+                " End ".into(),
+                "<E> ".blue().bold(),
+            ]));
+
         let block: Block<'_> = Block::bordered()
             .title(score.alignment(Alignment::Center).position(Position::Top))
+            .title(instructions.alignment(Alignment::Center).position(Position::Bottom))
+
             .border_set(border::DOUBLE);
         let input_line = Span::from(self.input.clone().white());
 
