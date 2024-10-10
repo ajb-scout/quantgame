@@ -32,9 +32,7 @@ pub fn render_table_from_questions(frame: &mut Frame, area: Rect, game: &mut Mat
         let mut tstring = i.duration_m.to_string();
         let running_average: f64 = 120000.0 / (running_total / (x as i64 + 1)) as f64; // quick calc for 120 seconds
         let rstring = running_average.to_string();
-        // tstring.insert(tstring.len() - 3, '.');
         tstring.push_str(" ms");
-        // let msstring = i.question_answer.unwrap().duration_since(i.question_start).as_millis().
 
         rows.push(Row::new(vec![
             Line::from(qstring),
@@ -92,7 +90,6 @@ pub fn render_table_from_history(frame: &mut Frame, area: Rect, game: &mut MathG
     let table = Table::new(
         rows,
         [
-            // + 1 is for padding.
             Constraint::Length(6),
             Constraint::Length(10),
             Constraint::Length(8),

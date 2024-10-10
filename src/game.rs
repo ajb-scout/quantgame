@@ -1,12 +1,14 @@
-use std::{io, thread, time::Duration};
-
 use chrono::{DateTime, Local, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
+use std::error;
+
+/// Application result type.
+pub type AppResult<T> = std::result::Result<T, Box<dyn error::Error>>;
+
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::poll,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Stylize,
     symbols::border,
@@ -15,13 +17,12 @@ use ratatui::{
         block::{Position, Title},
         Block, Paragraph, TableState, Widget,
     },
-    DefaultTerminal, Frame,
+    Frame,
 };
 
 use crate::{
     config::{GameConfiguration, QuestionRanges},
     history::{GameHistory, GameRecord},
-    renderers::{render_end_splash, render_game_splash},
     util::{self, Sign},
 };
 
@@ -132,74 +133,74 @@ impl MathGame {
         let _ = &self.handle_game_start();
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    pub fn draw(&self, frame: &mut Frame) {
         let layout: std::rc::Rc<[Rect]> =
             Layout::new(Direction::Vertical, [Constraint::Percentage(100)]).split(frame.area());
         frame.render_widget(self, layout[0]);
         // frame.render_widget(Block::bordered(), layout[1]);
     }
 
-    /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        let debug_times = crate::util::generate_random_durations(
-            Duration::from_secs(self.gameconfig.timer as u64),
-            self.gameconfig.debug_questions,
-        );
-        let mut debug_index = 0;
+    // /// runs the application's main loop until the user quits
+    // pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    //     let debug_times = crate::util::generate_random_durations(
+    //         Duration::from_secs(self.gameconfig.timer as u64),
+    //         self.gameconfig.debug_questions,
+    //     );
+    //     let mut debug_index = 0;
 
-        while !self.exit {
-            // determine which screen to draw based on the GameState
-            match self.gamestate {
-                GameState::Setup => terminal.draw(|frame| render_game_splash(frame, self))?,
-                GameState::Inprogress => terminal.draw(|frame| self.draw(frame))?,
-                GameState::EndingSplash => {
-                    terminal.draw(|frame: &mut Frame<'_>| render_end_splash(frame, self))?
-                }
-                GameState::HistorySplash => {
-                    terminal.draw(|frame| crate::renderers::render_history_splash(frame, self))?
-                }
-                GameState::SettingsSpash => todo!(),
-            };
+    //     while !self.exit {
+    //         // determine which screen to draw based on the GameState
+    //         match self.gamestate {
+    //             GameState::Setup => terminal.draw(|frame| render_game_splash(frame, self))?,
+    //             GameState::Inprogress => terminal.draw(|frame| self.draw(frame))?,
+    //             GameState::EndingSplash => {
+    //                 terminal.draw(|frame: &mut Frame<'_>| render_end_splash(frame, self))?
+    //             }
+    //             GameState::HistorySplash => {
+    //                 terminal.draw(|frame| crate::renderers::render_history_splash(frame, self))?
+    //             }
+    //             GameState::SettingsSpash => todo!(),
+    //         };
 
-            self.current_time = Local::now();
+    //         self.current_time = Local::now();
 
-            if self.gameconfig.debug
-                && debug_index < debug_times.len()
-                && self.gamestate != GameState::EndingSplash
-            {
-                if self.gamestate == GameState::Setup {
-                    self.gamestate = GameState::Inprogress;
-                }
-                thread::sleep(debug_times[debug_index]);
-                self.input = self.current_question.answer.to_string();
-                self.score += 1;
-                self.input.clear();
-                self.current_question.question_answer = Some(Local::now());
-                self.questions.push(self.current_question);
+    //         if self.gameconfig.debug
+    //             && debug_index < debug_times.len()
+    //             && self.gamestate != GameState::EndingSplash
+    //         {
+    //             if self.gamestate == GameState::Setup {
+    //                 self.gamestate = GameState::Inprogress;
+    //             }
+    //             thread::sleep(debug_times[debug_index]);
+    //             self.input = self.current_question.answer.to_string();
+    //             self.score += 1;
+    //             self.input.clear();
+    //             self.current_question.question_answer = Some(Local::now());
+    //             self.questions.push(self.current_question);
 
-                self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
+    //             self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
 
-                debug_index += 1;
-            } else if self.gamestate == GameState::Inprogress && debug_index == debug_times.len() {
-                self.gamestate = GameState::EndingSplash;
-            } else {
-                poll(Duration::from_millis(10))?;
-                {
-                    //pings crossterm for input every 10ms
-                    let _ = crate::event_handlers::handle_events(self);
-                }
-            }
+    //             debug_index += 1;
+    //         } else if self.gamestate == GameState::Inprogress && debug_index == debug_times.len() {
+    //             self.gamestate = GameState::EndingSplash;
+    //         } else {
+    //             poll(Duration::from_millis(10))?;
+    //             {
+    //                 //pings crossterm for input every 10ms
+    //                 let _ = crate::event_handlers::handle_events(self);
+    //             }
+    //         }
 
-            // game over on timeout
-            if self.gamestate == GameState::Inprogress
-                && (self.current_time - self.start_time).num_seconds() as i32
-                    > self.gameconfig.timer
-            {
-                self.handle_game_end(true);
-            }
-        }
-        Ok(())
-    }
+    //         // game over on timeout
+    //         if self.gamestate == GameState::Inprogress
+    //             && (self.current_time - self.start_time).num_seconds() as i32
+    //                 > self.gameconfig.timer
+    //         {
+    //             self.handle_game_end(true);
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     pub fn exit(&mut self) {
         self.exit = true;
@@ -244,7 +245,10 @@ impl Widget for &MathGame {
     }
 }
 
+// class representing an individual math question
 impl MathQuestion {
+
+    //generates a math answer, used to stop recomputing each UI tick
     fn generate_math_answer(self) -> MathAnswer {
         let srep = format!(
             "{:<3} {} {:<3}",
@@ -264,33 +268,39 @@ impl MathQuestion {
         };
     }
 
+    //generates the LHS and RHS values for a question given a question range
     fn generate_lhs_rhs(qr: &QuestionRanges, sign: &Sign) -> (i32, i32) {
+        let mut rng = rand::thread_rng();
+
         return match sign {
             Sign::Multiply => (
-                rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper),
-                rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper),
+                rng.gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper),
+                rng.gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper),
             ),
             Sign::Add => (
-                rand::thread_rng().gen_range(qr.add_lower..qr.add_upper),
-                rand::thread_rng().gen_range(qr.add_lower..qr.add_upper),
+                rng.gen_range(qr.add_lower..qr.add_upper),
+                rng.gen_range(qr.add_lower..qr.add_upper),
             ),
             Sign::Subtract => {
-                let lhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
-                let rhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
+                let lhs = rng.gen_range(qr.add_lower..qr.add_upper);
+                let rhs = rng.gen_range(qr.add_lower..qr.add_upper);
+                // always have a positive answer
                 if lhs > rhs {
                     return (lhs, rhs);
                 }
                 (rhs, lhs)
             }
             Sign::Divide => {
-                let lhs = rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper);
-                let rhs = rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper);
+                let lhs = rng.gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper);
+                let rhs = rng.gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper); 
+                // get divide from mult to ensure round number answer
                 let ans = lhs * rhs;
                 (ans, lhs)
             }
         };
     }
 
+    //randomly generate a new question
     pub fn generate_new_question(qr: &QuestionRanges) -> MathQuestion {
         let sign = match rand::thread_rng().gen_range(1..5) {
             1 => Sign::Add,
@@ -302,6 +312,7 @@ impl MathQuestion {
 
         let lhs_rhs = Self::generate_lhs_rhs(qr, &sign);
         let answer: i32 = util::apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
+        
         let new_question = MathQuestion {
             lhs: lhs_rhs.0,
             rhs: lhs_rhs.1,
