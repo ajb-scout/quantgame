@@ -1,14 +1,9 @@
-use ratatui::layout::Constraint;
-use ratatui::style::{Color, Style};
-use ratatui::symbols::border;
-use ratatui::text::{Line, Text};
+use chrono::serde::ts_nanoseconds;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use chrono::serde::ts_nanoseconds;
-use ratatui::widgets::*;
-use chrono::{DateTime, Local, Utc};
 
 use crate::MathAnswer;
 
@@ -16,30 +11,30 @@ use crate::MathAnswer;
 pub struct GameHistory {
     path: String,
     pub history: Vec<GameRecord>,
-    
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameRecord {
     #[serde(with = "ts_nanoseconds")]
     pub game_intant: DateTime<Utc>,
-    pub score: i32, 
-    pub answers: Vec<MathAnswer>
+    pub score: i32,
+    pub answers: Vec<MathAnswer>,
 }
 
 impl Default for GameHistory {
     fn default() -> Self {
-        Self { path: Default::default(), history: Default::default() }
+        Self {
+            path: Default::default(),
+            history: Default::default(),
+        }
     }
 }
-
-
 
 impl GameHistory {
     // Load or create the game history from a specified path
     pub fn new<P: AsRef<Path>>(path: P) -> io::Result<GameHistory> {
         let path_str = path.as_ref().to_string_lossy().into_owned();
-        
+
         if Path::new(&path_str).exists() {
             // If the file exists, read the content
             let mut file = File::open(&path_str)?;
@@ -77,4 +72,3 @@ impl GameHistory {
         file.write_all(json.as_bytes())
     }
 }
-

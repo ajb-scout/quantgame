@@ -4,6 +4,16 @@ use rand_distr::{Distribution, Normal};
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
+use crate::game::{MathAnswer, MathGame};
+
+pub const ASCII_TITLE: [&str; 5] = [
+    "   ____                   _     ___                     ",
+    r"  /___ \_   _  __ _ _ __ | |_  / _ \__ _ _ __ ___   ___ ",
+    r" //  / / | | |/ _` | '_ \| __|/ /_\/ _` | '_ ` _ \ / _ \",
+    r"/ \_/ /| |_| | (_| | | | | |_/ /_\\ (_| | | | | | |  __/",
+    r"\___,_\ \__,_|\__,_|_| |_|\__\____/\__,_|_| |_| |_|\___|",
+];
+
 pub fn apply_sign(sign: &Sign, lhs: i32, rhs: i32) -> i32 {
     return match sign {
         Sign::Multiply => lhs * rhs,
@@ -103,4 +113,12 @@ pub fn generate_random_durations(total_duration: Duration, count: i32) -> Vec<Du
         .into_iter()
         .map(|nanos| Duration::new(0, nanos as u32))
         .collect()
+}
+
+pub fn get_target_answers(game: &MathGame) -> &Vec<MathAnswer>{
+    match game.gamestate {
+        crate::game::GameState::HistorySplash => {&game.game_history.history[game.history_table_state.selected().unwrap_or_default().min(game.game_history.history.len() -1)].answers},
+        _ => {&game.answers}
+    }
+
 }

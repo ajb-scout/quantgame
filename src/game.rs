@@ -1,4 +1,4 @@
-use std::{cell::RefCell, io, thread, time::Duration};
+use std::{io, thread, time::Duration};
 
 use chrono::{DateTime, Local, Utc};
 use rand::Rng;
@@ -6,24 +6,24 @@ use serde::{Deserialize, Serialize};
 
 use ratatui::{
     buffer::Buffer,
-    crossterm::{self, event::{self, poll, Event, KeyCode, KeyEvent, KeyEventKind}},
+    crossterm::event::poll,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Stylize,
     symbols::border,
-    text::{Line, Span, Text, ToSpan},
+    text::{Line, Span, Text},
     widgets::{
         block::{Position, Title},
-        Block, Cell, Paragraph, Row, Table, TableState, Widget, Wrap,
+        Block, Paragraph, TableState, Widget,
     },
     DefaultTerminal, Frame,
 };
 
-use crate::{ASCII_TITLE, config::{GameConfiguration, QuestionRanges}, history::{GameHistory, GameRecord}, renderers::{display_test_splash, draw_end_splash, render_game_splash}, util::{self, Sign}};
+use crate::{config::{GameConfiguration, QuestionRanges}, history::{GameHistory, GameRecord}, renderers::{render_end_splash, render_game_splash}, util::{self, Sign}};
 
 
 
 #[derive(Debug, PartialEq)]
-enum GameState {
+pub enum GameState {
     Setup,
     Inprogress,
     EndingSplash,
@@ -91,10 +91,10 @@ impl Default for MathGame {
 }
 
 impl MathGame {
-    fn get_elapsed_time_seconds(&self) -> i32{
+    pub fn get_elapsed_time_seconds(&self) -> i32{
         return (Local::now() - self.start_time).num_seconds() as i32
     }
-    fn handle_game_start(&mut self) {
+    pub fn handle_game_start(&mut self) {
         self.score = 0;
         self.answers = vec![];
         self.questions = vec![];
@@ -104,7 +104,7 @@ impl MathGame {
         self.gamestate = GameState::Inprogress;
     }
 
-    fn handle_game_end(&mut self, save: bool) {
+    pub fn handle_game_end(&mut self, save: bool) {
         self.current_question.question_answer = Some(Local::now());
         self.questions.push(self.current_question);
         self.answers = self
@@ -125,8 +125,8 @@ impl MathGame {
         self.gamestate = GameState::EndingSplash;
     }
 
-    fn handle_game_restart(&mut self) {
-        &self.handle_game_start();
+    pub fn handle_game_restart(&mut self) {
+        let _ = &self.handle_game_start();
     }
 
 
@@ -152,10 +152,10 @@ impl MathGame {
                 GameState::Setup => terminal.draw(|frame| render_game_splash(frame, self))?,
                 GameState::Inprogress => terminal.draw(|frame| self.draw(frame))?,
                 GameState::EndingSplash => {
-                    terminal.draw(|frame: &mut Frame<'_>| draw_end_splash(frame, self))?
+                    terminal.draw(|frame: &mut Frame<'_>| render_end_splash(frame, self))?
                 }
                 GameState::HistorySplash => {
-                    terminal.draw(|frame| crate::renderers::draw_history_splash(frame, self))?
+                    terminal.draw(|frame| crate::renderers::render_history_splash(frame, self))?
                 }
                 GameState::SettingsSpash => todo!(),
             };
@@ -185,7 +185,7 @@ impl MathGame {
                 poll(Duration::from_millis(10))?;
                 {
                     //pings crossterm for input every 10ms
-                    let _ = self.handle_events();
+                    let _ = crate::event_handlers::handle_events(self);
 
                 }
             }
@@ -201,94 +201,9 @@ impl MathGame {
         Ok(())
     }
 
-    fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            // it's important to check that the event is a key press event as
-            // crossterm also emits key release and repeat events on Windows.
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                match self.gamestate {
-                    GameState::Setup => self.handle_key_event_splash(key_event),
-                    GameState::Inprogress => self.handle_key_event_game(key_event),
-                    GameState::EndingSplash => self.handle_end_event_splash(key_event),
-                    GameState::HistorySplash => self.handle_key_event_history(key_event),
-                    GameState::SettingsSpash => self.handle_key_event_game(key_event),
-                }
-            }
-            _ => {}
-        };
-        Ok(())
-    }
-    fn handle_end_event_splash(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Up => self.result_table_state.select_previous(),
-            KeyCode::Down => self.result_table_state.select_next(),
-            _ => {}
-        }
-    }
 
-    fn handle_key_event_history(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Up => self.history_table_state.select_previous(),
-            KeyCode::Down => self.history_table_state.select_next(),
-            _ => {}
-        }
-    }
 
-    fn handle_key_event_splash(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Char('s') => {
-                self.gamestate = GameState::Inprogress;
-                self.start_time = Local::now();
-                self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr)
-            }
-            KeyCode::Char('h') => {
-                self.gamestate = GameState::HistorySplash;
-            }
-
-            KeyCode::Delete => {
-                self.input.pop();
-            }
-
-            _ => {}
-        }
-
-        let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
-        // correct answer
-        if solved {
-            self.score += 1;
-            self.input.clear();
-            self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
-        }
-    }
-
-    fn handle_key_event_game(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => &self.exit(),
-            KeyCode::Char('r') => &self.handle_game_restart(),
-            KeyCode::Backspace => &{
-                let _ = &self.input.pop();
-            },
-            KeyCode::Delete => &{
-                let _ = &self.input.pop();
-            },
-
-            _ => &self.input.push_str(&key_event.code.to_string()),
-        };
-
-        let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
-        if solved {
-            self.score += 1;
-            self.input.clear();
-            self.current_question.question_answer = Some(Local::now());
-            self.questions.push(self.current_question);
-            self.current_question = MathQuestion::generate_new_question(&self.gameconfig.qr);
-        }
-    }
-
-    fn exit(&mut self) {
+    pub fn exit(&mut self) {
         self.exit = true;
     }
 }
@@ -296,33 +211,22 @@ impl MathGame {
 
 impl Widget for &MathGame {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from("Quant Game");
-
         let score = Title::from(Line::from(vec![
             " Score:  ".into(),
             self.score.to_string().bold(),
             "  Elapsed:  ".into(),
-            self.get_elapsed_time_seconds()
-                .to_string()
-                .bold(),
+            self.get_elapsed_time_seconds().to_string().bold(),
             " ".into(),
         ]));
 
-        let block = Block::bordered()
-            // .title(title.alignment(Alignment::Center))
-            
+        let block: Block<'_> = Block::bordered()
             .title(
                 score
                     .alignment(Alignment::Center)
                     .position(Position::Top),
             )
             .border_set(border::DOUBLE);
-
-        let solved = self.input.parse::<i32>() == Ok(self.current_question.answer);
-        let mut input_line = Span::from(self.input.clone().white());
-        if solved {
-            input_line = Span::from(self.input.clone().green());
-        }
+        let input_line = Span::from(self.input.clone().white());
 
         let counter_text = Text::from(vec![
             Line::from(vec![format!("Question {}: ", self.score + 1).yellow()]),
