@@ -1,4 +1,3 @@
-
 use chrono::{DateTime, Local, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -26,8 +25,6 @@ use crate::{
     history::{GameHistory, GameRecord},
     util::{self, Sign},
 };
-
-
 
 #[derive(Debug, PartialEq)]
 pub enum GameState {
@@ -248,7 +245,10 @@ impl Widget for &MathGame {
     }
 }
 
+// class representing an individual math question
 impl MathQuestion {
+
+    //generates a math answer, used to stop recomputing each UI tick
     fn generate_math_answer(self) -> MathAnswer {
         let srep = format!(
             "{:<3} {} {:<3}",
@@ -268,33 +268,39 @@ impl MathQuestion {
         };
     }
 
+    //generates the LHS and RHS values for a question given a question range
     fn generate_lhs_rhs(qr: &QuestionRanges, sign: &Sign) -> (i32, i32) {
+        let mut rng = rand::thread_rng();
+
         return match sign {
             Sign::Multiply => (
-                rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper),
-                rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper),
+                rng.gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper),
+                rng.gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper),
             ),
             Sign::Add => (
-                rand::thread_rng().gen_range(qr.add_lower..qr.add_upper),
-                rand::thread_rng().gen_range(qr.add_lower..qr.add_upper),
+                rng.gen_range(qr.add_lower..qr.add_upper),
+                rng.gen_range(qr.add_lower..qr.add_upper),
             ),
             Sign::Subtract => {
-                let lhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
-                let rhs = rand::thread_rng().gen_range(qr.add_lower..qr.add_upper);
+                let lhs = rng.gen_range(qr.add_lower..qr.add_upper);
+                let rhs = rng.gen_range(qr.add_lower..qr.add_upper);
+                // always have a positive answer
                 if lhs > rhs {
                     return (lhs, rhs);
                 }
                 (rhs, lhs)
             }
             Sign::Divide => {
-                let lhs = rand::thread_rng().gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper);
-                let rhs = rand::thread_rng().gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper);
+                let lhs = rng.gen_range(qr.mult_lhs_lower..qr.mult_lhs_upper);
+                let rhs = rng.gen_range(qr.mult_rhs_lower..qr.mult_rhs_upper); 
+                // get divide from mult to ensure round number answer
                 let ans = lhs * rhs;
                 (ans, lhs)
             }
         };
     }
 
+    //randomly generate a new question
     pub fn generate_new_question(qr: &QuestionRanges) -> MathQuestion {
         let sign = match rand::thread_rng().gen_range(1..5) {
             1 => Sign::Add,
@@ -306,6 +312,7 @@ impl MathQuestion {
 
         let lhs_rhs = Self::generate_lhs_rhs(qr, &sign);
         let answer: i32 = util::apply_sign(&sign, lhs_rhs.0, lhs_rhs.1);
+        
         let new_question = MathQuestion {
             lhs: lhs_rhs.0,
             rhs: lhs_rhs.1,

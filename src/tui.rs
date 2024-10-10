@@ -1,5 +1,5 @@
-use crate::game::{AppResult, GameState, MathGame};
 use crate::event::EventHandler;
+use crate::game::{AppResult, GameState, MathGame};
 use crate::renderers::*;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
@@ -51,19 +51,16 @@ impl<B: Backend> Tui<B> {
     /// [`Draw`]: ratatui::Terminal::draw
     /// [`rendering`]: crate::ui::render
     pub fn draw(&mut self, app: &mut MathGame) -> AppResult<()> {
-        
         match app.gamestate {
             GameState::Setup => self.terminal.draw(|frame| render_game_splash(frame, app))?,
             GameState::Inprogress => self.terminal.draw(|frame| app.draw(frame))?,
-            GameState::EndingSplash => {
-                self.terminal.draw(|frame| render_end_splash(frame, app))?
-            }
-            GameState::HistorySplash => {
-                self.terminal.draw(|frame| crate::renderers::render_history_splash(frame, app))?
-            }
+            GameState::EndingSplash => self.terminal.draw(|frame| render_end_splash(frame, app))?,
+            GameState::HistorySplash => self
+                .terminal
+                .draw(|frame| crate::renderers::render_history_splash(frame, app))?,
             GameState::SettingsSpash => todo!(),
         };
-    Ok(())
+        Ok(())
     }
 
     /// Resets the terminal interface.

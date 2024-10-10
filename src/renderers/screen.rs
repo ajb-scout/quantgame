@@ -21,11 +21,12 @@ pub(crate) fn display_result_summary(frame: &mut Frame, area: Rect, game: &MathG
                 acc
             });
 
-        let mut sorted_sums: Vec<(String, i32)> = grouped_sums.into_iter().map(|f| (f.0.to_string(), f.1)).collect();
+    let mut sorted_sums: Vec<(String, i32)> = grouped_sums
+        .into_iter()
+        .map(|f| (f.0.to_string(), f.1))
+        .collect();
     sorted_sums.sort_by(|a, b| a.0.cmp(&b.0)); // Sort by key (the String)
 
-
-    
     let mut line_vec = vec![];
     line_vec.push(Line::from(format!("Score: {}", game.answers.len() - 1)));
 

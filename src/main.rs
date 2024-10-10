@@ -1,17 +1,17 @@
 mod config;
+pub mod event;
 pub mod event_handlers;
 pub mod game;
 mod history;
 pub mod renderers;
-pub mod util;
-pub mod event;
 pub mod tui;
+pub mod util;
 
 use event::{Event, EventHandler};
 use game::{AppResult, MathAnswer, MathGame};
 use ratatui::{prelude::CrosstermBackend, Terminal};
-use tui::Tui;
 use std::io;
+use tui::Tui;
 
 // #[tokio::main]
 // async fn main() -> io::Result<()> {
@@ -39,7 +39,7 @@ async fn main() -> AppResult<()> {
         tui.draw(&mut app)?;
         // Handle events.
         match tui.events.next().await? {
-            Event::Tick => {event_handlers::handle_tick_event(&mut app)},
+            Event::Tick => event_handlers::handle_tick_event(&mut app),
             Event::Key(key_event) => event_handlers::handle_events(key_event, &mut app)?,
             // Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
