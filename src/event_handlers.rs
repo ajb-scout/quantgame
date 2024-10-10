@@ -1,23 +1,25 @@
 use std::io;
 
 use chrono::Local;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 use crate::game::{GameState, MathGame, MathQuestion};
 
-pub fn handle_events(game: &mut MathGame) -> io::Result<()> {
-    match event::read()? {
-        // it's important to check that the event is a key press event as
-        // crossterm also emits key release and repeat events on Windows.
-        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => match game.gamestate {
+pub fn handle_tick_event(game: &mut MathGame) {
+    if game.get_elapsed_time_seconds() > game.gameconfig.timer && game.gamestate == GameState::Inprogress {
+        game.handle_game_end(true);
+    }
+}
+
+pub fn handle_events(key_event: KeyEvent, game: &mut MathGame) -> io::Result<()> {
+     match game.gamestate {
             GameState::Setup => handle_key_event_splash(game, key_event),
             GameState::Inprogress => handle_key_event_game(game, key_event),
             GameState::EndingSplash => handle_end_event_splash(game, key_event),
             GameState::HistorySplash => handle_key_event_history(game, key_event),
             GameState::SettingsSpash => handle_key_event_game(game, key_event),
-        },
-        _ => {}
-    };
+        }
+    
     Ok(())
 }
 fn handle_end_event_splash(game: &mut MathGame, key_event: KeyEvent) {
